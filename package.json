@@ -1,0 +1,29 @@
+{
+  "name": "seocore-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Enterprise-grade SEO Analysis Platform MVP",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "vitest run",
+    "cli": "tsx packages/cli/src/index.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "nx": "^22.7.3",
+    "tsx": "^4.10.5",
+    "typescript": "^5.4.5",
+    "vitest": "^4.1.7"
+  },
+  "dependencies": {
+    "bottleneck": "^2.19.5",
+    "cheerio": "^1.0.0-rc.12",
+    "commander": "^12.1.0",
+    "p-queue": "^9.3.0",
+    "picocolors": "^1.0.1",
+    "zod": "^3.23.8"
+  }
+}

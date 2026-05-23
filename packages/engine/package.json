@@ -1,0 +1,19 @@
+{
+  "name": "@seocore/engine",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@seocore/sdk": "*",
+    "@seocore/config": "*",
+    "@seocore/crawler": "*",
+    "@seocore/analyzers": "*",
+    "@seocore/rules": "*",
+    "@seocore/scoring": "*"
+  }
+}

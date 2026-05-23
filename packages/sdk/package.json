@@ -1,0 +1,14 @@
+{
+  "name": "@seocore/sdk",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  }
+}

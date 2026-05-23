@@ -1,0 +1,12 @@
+{
+  "preset": "standard",
+  "concurrency": 3,
+  "maxDepth": 3,
+  "maxPages": 100,
+  "rateLimitMs": 100,
+  "retryCount": 2,
+  "playwrightEnabled": false,
+  "excludePatterns": [],
+  "includePatterns": [],
+  "ruleOverrides": {}
+}

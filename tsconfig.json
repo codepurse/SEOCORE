@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true,
+    "outDir": "dist",
+    "baseUrl": ".",
+    "paths": {
+      "@seocore/sdk": ["packages/sdk/src/index.ts"],
+      "@seocore/config": ["packages/config/src/index.ts"],
+      "@seocore/crawler": ["packages/crawler/src/index.ts"],
+      "@seocore/analyzers": ["packages/analyzers/src/index.ts"],
+      "@seocore/rules": ["packages/rules/src/index.ts"],
+      "@seocore/scoring": ["packages/scoring/src/index.ts"],
+      "@seocore/reporter": ["packages/reporter/src/index.ts"],
+      "@seocore/engine": ["packages/engine/src/index.ts"]
+    }
+  },
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+}
