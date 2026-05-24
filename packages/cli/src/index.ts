@@ -3,13 +3,15 @@
 import { Command } from 'commander';
 import pc from 'picocolors';
 import { SeoEngine } from '@seocore/engine';
-import { EventBus, Severity, AuditPreset, Category, Backlink } from '@seocore/sdk';
-import { TerminalReporter, JsonReporter, HtmlReporter } from '@seocore/reporter';
+import { EventBus, Severity, AuditPreset, Category, Backlink, AuditResult } from '@seocore/sdk';
+import { TerminalReporter, JsonReporter, HtmlReporter, SarifReporter, CompareEngine } from '@seocore/reporter';
 import { initConfigFile, resolveConfig } from '@seocore/config';
 import { RuleEngine } from '@seocore/rules';
 import { createBacklinkClient } from '@seocore/backlinks';
 import { Spinner } from './utils/spinner.js';
 import inquirer from 'inquirer';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const program = new Command();
 
@@ -37,10 +39,16 @@ program
   .option('--playwright', 'Use Playwright headless browser rendering')
   .option('--lighthouse', 'Enable Lighthouse performance metrics and Core Web Vitals (slower)')
   .option('--lighthouse-sample', 'Number of pages to sample with Lighthouse (default: all pages)', parseInt)
-  .option('-f, --format <format>', 'Output format: terminal, json, html, both, all', 'terminal')
-  .option('-o, --output <path>', 'JSON or HTML export file path (defaults to ./seocore-report.json or ./seocore-report.html)')
+  .option('-f, --format <format>', 'Output format: terminal, json, html, both, all, sarif', 'terminal')
+  .option('-o, --output <path>', 'Export file path')
   .option('-v, --verbose', 'Show full diagnostic findings details', false)
   .option('--min-severity <severity>', 'Minimum severity to show in terminal: critical, error, warning, info', 'warning')
+  .option('--ci', 'Enable CI mode (no interactive prompts, non-zero exit codes)', false)
+  .option('--fail-on <severities>', 'Comma-separated severities that trigger exit code 1 (default: critical,error)')
+  .option('--budget-lcp <ms>', 'Largest Contentful Paint budget in ms')
+  .option('--budget-cls <number>', 'Cumulative Layout Shift budget')
+  .option('--budget-inp <ms>', 'Interaction to Next Paint budget in ms')
+  .option('--budget-js <bytes>', 'Total JavaScript payload budget')
   .action(async (url, options) => {
     try {
       // Validate starting URL protocol
@@ -74,9 +82,9 @@ program
       if (options.playwright) partialConfig.playwrightEnabled = true;
       if (options.lighthouseSample !== undefined) partialConfig.lighthouseSampleCount = options.lighthouseSample;
       
-      // Check if we need to prompt about Lighthouse for full scans
+      // Check if we need to prompt about Lighthouse for full scans (only if not in CI mode)
       let useLighthouse = options.lighthouse;
-      if (options.full && useLighthouse === undefined) {
+      if (!options.ci && options.full && useLighthouse === undefined) {
         console.log(pc.yellow('\n⚠️  Lighthouse will run on EVERY page in a full scan, which can be very slow!'));
         const answers = await inquirer.prompt([
           {
@@ -175,6 +183,13 @@ program
         console.log(pc.green(`✔  HTML Report exported to ${pc.bold(absolutePath)}`));
       }
 
+      // Export SARIF if requested
+      if (options.format === 'sarif') {
+        const outPath = options.output && options.output.endsWith('.sarif') ? options.output : './seocore-report.sarif';
+        const absolutePath = SarifReporter.export(result, outPath);
+        console.log(pc.green(`✔  SARIF Report exported to ${pc.bold(absolutePath)}`));
+      }
+
       // Print terminal report if requested
       if (options.format === 'terminal' || options.format === 'both' || options.format === 'all') {
         TerminalReporter.report(result, {
@@ -183,9 +198,74 @@ program
         });
       }
 
+      // CI Mode: Check for failures and exit codes
+      if (options.ci) {
+        let exitCode = 0;
+
+        // 1. Check findings against fail-on severities
+        const failOnSeverities = options.failOn ? options.failOn.split(',') : ['critical', 'error'];
+        const hasMatchingFindings = result.findings.some(finding => failOnSeverities.includes(finding.severity));
+        if (hasMatchingFindings) {
+          exitCode = 1;
+        }
+
+        // 2. Check budgets
+        let budgetExceeded = false;
+        interface BudgetResult { metric: string; budget: number; actual: number; passed: boolean; }
+        const budgetResults: BudgetResult[] = [];
+
+        const pagesWithVitals = Object.values(result.pages || {}).filter(p => p.coreWebVitals);
+        if (pagesWithVitals.length > 0) {
+          const avgLcp = pagesWithVitals.reduce((sum, p) => sum + (p.coreWebVitals?.lcp || 0), 0) / pagesWithVitals.length;
+          const avgCls = pagesWithVitals.reduce((sum, p) => sum + (p.coreWebVitals?.cls || 0), 0) / pagesWithVitals.length;
+          const avgInp = pagesWithVitals.reduce((sum, p) => sum + (p.coreWebVitals?.inp || 0), 0) / pagesWithVitals.length;
+
+          if (options.budgetLcp !== undefined) {
+            const passed = avgLcp <= options.budgetLcp;
+            budgetResults.push({ metric: 'LCP', budget: options.budgetLcp, actual: avgLcp, passed });
+            if (!passed) budgetExceeded = true;
+          }
+          if (options.budgetCls !== undefined) {
+            const passed = avgCls <= options.budgetCls;
+            budgetResults.push({ metric: 'CLS', budget: options.budgetCls, actual: avgCls, passed });
+            if (!passed) budgetExceeded = true;
+          }
+          if (options.budgetInp !== undefined) {
+            const passed = avgInp <= options.budgetInp;
+            budgetResults.push({ metric: 'INP', budget: options.budgetInp, actual: avgInp, passed });
+            if (!passed) budgetExceeded = true;
+          }
+        }
+
+        if (options.budgetJs !== undefined) {
+          const totalJs = Object.values(result.pages || {}).reduce((sum, p) => sum + (p.resources?.jsSizeBytes || 0), 0);
+          const passed = totalJs <= options.budgetJs;
+          budgetResults.push({ metric: 'JS Payload', budget: options.budgetJs, actual: totalJs, passed });
+          if (!passed) budgetExceeded = true;
+        }
+
+        if (budgetExceeded) {
+          exitCode = exitCode === 1 ? 3 : 2;
+        }
+
+        // Print budget results
+        if (budgetResults.length > 0) {
+          console.log('\n' + pc.bold('PERFORMANCE BUDGETS:'));
+          for (const br of budgetResults) {
+            const statusColor = br.passed ? pc.green : pc.red;
+            console.log(`  ${br.metric.padEnd(15)} Budget: ${br.budget}, Actual: ${br.actual.toFixed(2)}, ${statusColor(br.passed ? 'PASSED' : 'FAILED')}`);
+          }
+        }
+
+        // Exit with appropriate code
+        if (exitCode !== 0) {
+          process.exit(exitCode);
+        }
+      }
+
     } catch (err: any) {
       console.error(pc.red(`\nAudit failed: ${err.message}`));
-      process.exit(1);
+      process.exit(4);
     }
   });
 
@@ -560,6 +640,193 @@ program
   });
 
 // ==========================================
+// 7.5. LLMS.TXT COMMAND
+// ==========================================
+program
+  .command('llms-txt')
+  .description('Check a website\'s llms.txt file for AI crawler directives')
+  .argument('<url>', 'Target website URL (e.g. https://example.com)')
+  .option('--json', 'Output results in raw JSON format', false)
+  .option('-f, --format <format>', 'Output format: terminal, json', 'terminal')
+  .option('-o, --output <path>', 'Export to file')
+  .option('--check-bots <bots>', 'Comma-separated list of bots to check (default: GPTBot,ClaudeBot,PerplexityBot,Google-Extended)')
+  .option('--check-well-known', 'Also check /.well-known/llms.txt (default: true)', true)
+  .option('--verbose', 'Show full directive parsing details', false)
+  .action(async (url, options) => {
+    try {
+      // Validate starting URL protocol
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        console.error(pc.red('Error: Target URL must start with http:// or https://'));
+        process.exit(1);
+      }
+
+      const isJson = options.json || options.format === 'json';
+      const spinner = new Spinner(`Checking llms.txt for ${url}...`);
+      if (!isJson) spinner.start();
+
+      const { HttpCrawler, LlmsTxtParser } = await import('@seocore/crawler');
+      const { resolveConfig } = await import('@seocore/config');
+      const config = resolveConfig();
+      const crawler = new HttpCrawler();
+
+      const baseUrl = new URL(url);
+      const llmsTxtUrl = `${baseUrl.origin}/llms.txt`;
+      const wellKnownLlmsTxtUrl = `${baseUrl.origin}/.well-known/llms.txt`;
+
+      const [llmsTxtResult, wellKnownLlmsTxtResult] = await Promise.all([
+        crawler.crawl(llmsTxtUrl, config),
+        options.checkWellKnown ? crawler.crawl(wellKnownLlmsTxtUrl, config) : Promise.resolve(null),
+      ]);
+
+      if (!isJson) spinner.stop('Finished llms.txt check.');
+
+      // Parse llms.txt if found
+      let parseResult: any = null;
+      if (llmsTxtResult.statusCode === 200 && llmsTxtResult.html) {
+        parseResult = LlmsTxtParser.parse(llmsTxtResult.html);
+      } else if (wellKnownLlmsTxtResult?.statusCode === 200 && wellKnownLlmsTxtResult.html) {
+        parseResult = LlmsTxtParser.parse(wellKnownLlmsTxtResult.html);
+      }
+
+      // Parse bot list
+      const botList = options.checkBots ? options.checkBots.split(',') : ['GPTBot', 'ClaudeBot', 'PerplexityBot', 'Google-Extended'];
+      const botAnalyses: any[] = [];
+      if (parseResult) {
+        for (const bot of botList) {
+          botAnalyses.push({
+            bot,
+            ...LlmsTxtParser.getBotStatus(parseResult, bot),
+          });
+        }
+      }
+
+      // Build recommendations
+      const recommendations: string[] = [];
+      if (llmsTxtResult.statusCode !== 200 && (!wellKnownLlmsTxtResult || wellKnownLlmsTxtResult.statusCode !== 200)) {
+        recommendations.push('No llms.txt file found at either /llms.txt or /.well-known/llms.txt');
+      }
+      if (options.checkWellKnown && (!wellKnownLlmsTxtResult || wellKnownLlmsTxtResult.statusCode !== 200)) {
+        recommendations.push('Consider adding a /.well-known/llms.txt file for standards compliance');
+      }
+      if (parseResult) {
+        for (const bot of botList) {
+          const analysis = botAnalyses.find(a => a.bot === bot);
+          if (analysis?.status === 'implicit') {
+            recommendations.push(`${bot} has no explicit rules. Add a "User-agent: ${bot}" section.`);
+          }
+        }
+      }
+
+      const output = {
+        url,
+        checkedAt: new Date().toISOString(),
+        discovery: {
+          llmsTxt: {
+            url: llmsTxtUrl,
+            statusCode: llmsTxtResult.statusCode,
+            found: llmsTxtResult.statusCode === 200,
+            sizeBytes: llmsTxtResult.html ? Buffer.byteLength(llmsTxtResult.html, 'utf8') : 0,
+          },
+          wellKnownLlmsTxt: options.checkWellKnown ? {
+            url: wellKnownLlmsTxtUrl,
+            statusCode: wellKnownLlmsTxtResult?.statusCode || 0,
+            found: wellKnownLlmsTxtResult?.statusCode === 200,
+          } : undefined,
+        },
+        parsing: parseResult ? {
+          sections: parseResult.sections,
+          totalAllowRules: parseResult.totalAllowRules,
+          totalDisallowRules: parseResult.totalDisallowRules,
+          parseErrors: parseResult.parseErrors,
+        } : undefined,
+        botAnalysis: botAnalyses,
+        recommendations,
+      };
+
+      if (isJson) {
+        if (options.output) {
+          const fs = await import('fs');
+          const path = await import('path');
+          fs.writeFileSync(options.output, JSON.stringify(output, null, 2), 'utf8');
+          console.log(pc.green(`✓ JSON report saved to ${path.resolve(options.output)}`));
+        } else {
+          console.log(JSON.stringify(output, null, 2));
+        }
+        return;
+      }
+
+      // Terminal output
+      console.log();
+      console.log(pc.bold(pc.cyan('==================================================')));
+      console.log(pc.bold(pc.cyan('            LLMS.TXT CHECKER                     ')));
+      console.log(pc.bold(pc.cyan('==================================================')));
+      console.log(`${pc.bold('Target URL:')} ${pc.underline(url)}`);
+      console.log(`${pc.bold('Checked At:')} ${new Date().toISOString()}`);
+      console.log();
+
+      console.log(pc.bold('LLMS.TXT DISCOVERY:'));
+      const llmsFound = llmsTxtResult.statusCode === 200;
+      console.log(`  /llms.txt           ${llmsFound ? pc.green('✓ Found') : pc.red('✗ Not Found')} (HTTP ${llmsTxtResult.statusCode})`);
+      if (llmsFound && llmsTxtResult.html) {
+        console.log(`                       ${pc.gray(`(${Buffer.byteLength(llmsTxtResult.html, 'utf8')} bytes)`)}`);
+      }
+
+      if (options.checkWellKnown) {
+        const wellKnownFound = wellKnownLlmsTxtResult?.statusCode === 200;
+        console.log(`  /.well-known/llms.txt ${wellKnownFound ? pc.green('✓ Found') : pc.red('✗ Not Found')} (HTTP ${wellKnownLlmsTxtResult?.statusCode || 0})`);
+        if (wellKnownFound && wellKnownLlmsTxtResult?.html) {
+          console.log(`                       ${pc.gray(`(${Buffer.byteLength(wellKnownLlmsTxtResult.html, 'utf8')} bytes)`)}`);
+        }
+      }
+      console.log();
+
+      if (parseResult) {
+        console.log(pc.bold('DIRECTIVE SUMMARY:'));
+        console.log(`  Total Sections:     ${parseResult.sections.length}`);
+        console.log(`  Total Allow Rules:  ${parseResult.totalAllowRules}`);
+        console.log(`  Total Disallow Rules: ${parseResult.totalDisallowRules}`);
+        if (parseResult.parseErrors.length > 0) {
+          console.log(pc.yellow(`  Parse Warnings:     ${parseResult.parseErrors.length}`));
+          if (options.verbose) {
+            parseResult.parseErrors.forEach((err: string) => {
+              console.log(pc.yellow(`    - ${err}`));
+            });
+          }
+        }
+        console.log();
+
+        console.log(pc.bold('AI BOT ANALYSIS:'));
+        for (const analysis of botAnalyses) {
+          const statusColor = analysis.status === 'allowed' ? pc.green : analysis.status === 'disallowed' ? pc.red : pc.yellow;
+          const statusIcon = analysis.status === 'allowed' ? '✓' : analysis.status === 'disallowed' ? '✗' : '⚠';
+          console.log(`  ${statusIcon} ${pc.bold(analysis.bot.padEnd(20))} ${statusColor(analysis.status.toUpperCase().padEnd(10))}`);
+          if (analysis.allowedPaths.length > 0) {
+            console.log(`                       Allowed: ${analysis.allowedPaths.join(', ')}`);
+          }
+          if (analysis.blockedPaths.length > 0) {
+            console.log(`                       Blocked: ${analysis.blockedPaths.join(', ')}`);
+          }
+        }
+        console.log();
+      } else {
+        console.log(pc.yellow('  No llms.txt file found to parse.'));
+        console.log();
+      }
+
+      if (recommendations.length > 0) {
+        console.log(pc.bold(pc.yellow('RECOMMENDATIONS:')));
+        recommendations.forEach((rec) => {
+          console.log(`  ⚠ ${rec}`);
+        });
+        console.log();
+      }
+    } catch (err: any) {
+      console.error(pc.red(`\nllms.txt check failed: ${err.message}`));
+      process.exit(1);
+    }
+  });
+
+// ==========================================
 // 8. BACKLINKS COMMAND
 // ==========================================
 program
@@ -766,5 +1033,213 @@ program
       process.exit(1);
     }
   });
+
+// ==========================================
+// 10. COMPARE Command
+// ==========================================
+program
+  .command('compare')
+  .description('Compare two websites or SEO audit reports')
+  .argument('<source1>', 'First URL or audit report JSON file')
+  .argument('<source2>', 'Second URL or audit report JSON file')
+  .option('--name1 <name>', 'Name for first site')
+  .option('--name2 <name>', 'Name for second site')
+  .option('--focus <type>', 'Focus comparison on: technical, content, ai-visibility, backlinks, mobile')
+  .option('--format <format>', 'Output format: terminal, json, html', 'terminal')
+  .option('--output <path>', 'Output file path for json/html formats')
+  .action(async (source1: string, source2: string, options) => {
+    try {
+      // Helper function to get audit result (either from file or by auditing URL)
+      const getAuditResult = async (source: string): Promise<AuditResult> => {
+        // Check if source is a URL
+        if (source.startsWith('http://') || source.startsWith('https://')) {
+          // Audit the URL
+          console.log(pc.cyan(`\n🕷  Auditing ${source}...`));
+          const eventBus = new EventBus();
+          const engine = new SeoEngine(eventBus);
+          const result = await engine.run(source, {
+            maxPages: 1, // Default to single page for quick comparison
+            maxDepth: 1
+          });
+
+          // Update AI visibility score
+          try {
+            const { runAiVisibility } = await import('./ai-visibility/index.js');
+            const aiVisResult = await runAiVisibility(source, { silent: true });
+            if (result.categories && result.categories.ai_visibility) {
+              result.categories.ai_visibility.score = aiVisResult.score;
+              result.categories.ai_visibility.totalDeductions = Math.round((100 - aiVisResult.score) * 10) / 10;
+              
+              const CATEGORY_WEIGHTS: Record<string, number> = {
+                indexing: 0.15,
+                metadata: 0.15,
+                links: 0.10,
+                seo: 0.10,
+                ai_visibility: 0.15,
+                accessibility: 0.10,
+                performance: 0.10,
+                mobile_seo: 0.15,
+                backlink_intelligence: 0.10,
+              };
+              
+              let weightedSum = 0;
+              let weightTotal = 0;
+              for (const cat of Object.keys(result.categories)) {
+                const catTyped = cat as Category;
+                const catWeight = CATEGORY_WEIGHTS[catTyped] ?? 0;
+                weightedSum += result.categories[catTyped].score * catWeight;
+                weightTotal += catWeight;
+              }
+              result.score = weightTotal > 0 ? Math.round(weightedSum / weightTotal) : 100;
+            }
+          } catch {}
+
+          return result;
+        } else {
+          // Read from file
+          const absolutePath = path.resolve(source);
+          if (!fs.existsSync(absolutePath)) {
+            throw new Error(`File not found: ${source}`);
+          }
+          const content = fs.readFileSync(absolutePath, 'utf8');
+          return JSON.parse(content);
+        }
+      };
+
+      // Get both audit results
+      const audit1 = await getAuditResult(source1);
+      const audit2 = await getAuditResult(source2);
+
+      // Validate focus option
+      const validFoci = ['technical', 'content', 'ai-visibility', 'backlinks', 'mobile'];
+      if (options.focus && !validFoci.includes(options.focus)) {
+        console.error(pc.red(`Invalid focus: ${options.focus}. Valid options: ${validFoci.join(', ')}`));
+        process.exit(1);
+      }
+
+      // Validate format option
+      const validFormats = ['terminal', 'json', 'html'];
+      if (options.format && !validFormats.includes(options.format)) {
+        console.error(pc.red(`Invalid format: ${options.format}. Valid options: ${validFormats.join(', ')}`));
+        process.exit(1);
+      }
+
+      // Run comparison
+      if (options.format === 'terminal') {
+        CompareEngine.report(audit1, audit2, {
+          siteAName: options.name1,
+          siteBName: options.name2,
+          focus: options.focus as 'technical' | 'content' | 'ai-visibility' | 'backlinks' | 'mobile'
+        });
+      } else if (options.format === 'json') {
+        const outputPath = options.output || './seocore-comparison.json';
+        const savedPath = CompareEngine.exportJson(audit1, audit2, outputPath, {
+          siteAName: options.name1,
+          siteBName: options.name2
+        });
+        console.log(pc.green(`\n✓ Comparison report saved to ${pc.bold(savedPath)}`));
+      } else if (options.format === 'html') {
+        const outputPath = options.output || './seocore-comparison.html';
+        const savedPath = CompareEngine.exportHtml(audit1, audit2, outputPath, {
+          siteAName: options.name1,
+          siteBName: options.name2
+        });
+        console.log(pc.green(`\n✓ Comparison report saved to ${pc.bold(savedPath)}`));
+      }
+    } catch (err: any) {
+      console.error(pc.red(`\nComparison failed: ${err.message}`));
+      process.exit(1);
+    }
+  });
+
+// ==========================================
+// SCHEMA COMMAND (Validate Schema.org)
+// ==========================================
+const schemaAction = async (url: string, options: any) => {
+  try {
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      console.error(pc.red('Error: Target URL must start with http:// or https://'));
+      process.exit(1);
+    }
+
+    const { Spinner } = await import('./utils/spinner.js');
+    const { resolveConfig } = await import('@seocore/config');
+    const { HttpCrawler } = await import('@seocore/crawler');
+    const { PageNormalizer, SchemaValidator } = await import('@seocore/analyzers');
+    const { SchemaReporter } = await import('./validate/reporter.js');
+
+    const config = resolveConfig();
+    const spinner = new Spinner('Validating Schema.org structured data...');
+    if (options.format !== 'json' && !options.json) spinner.start();
+
+    const crawler = new HttpCrawler();
+    const crawlResult = await crawler.crawl(url, config);
+
+    if (crawlResult.error) {
+      throw new Error(crawlResult.error);
+    }
+
+    const normalizedPage = PageNormalizer.normalize(crawlResult);
+    const validator = new SchemaValidator();
+    let validationResult = validator.validate(normalizedPage.structuredData, url, normalizedPage);
+
+    if (options.schema) {
+      const targetTypes = options.schema.split(',').map((t: string) => t.trim().toLowerCase());
+      validationResult = {
+        ...validationResult,
+        schemas: validationResult.schemas.filter((schema: any) =>
+          targetTypes.includes(schema.type.toLowerCase())
+        )
+      };
+      validationResult.totalSchemas = validationResult.schemas.length;
+      validationResult.validSchemas = validationResult.schemas.filter((s: any) => s.valid).length;
+      validationResult.invalidSchemas = validationResult.totalSchemas - validationResult.validSchemas;
+      validationResult.totalErrors = validationResult.schemas.reduce((sum: number, s: any) => sum + s.issues.filter((i: any) => i.level === 'error').length, 0);
+      validationResult.totalWarnings = validationResult.schemas.reduce((sum: number, s: any) => sum + s.issues.filter((i: any) => i.level === 'warning').length, 0);
+    }
+
+    if (options.format !== 'json' && !options.json && options.format !== 'sarif') spinner.stop('Validation complete!');
+
+    if (options.json || options.format === 'json') {
+      SchemaReporter.reportJson(validationResult, options.output);
+    } else if (options.format === 'sarif') {
+      SchemaReporter.reportSarif(validationResult, options.output || './seocore-schema-report.sarif');
+    } else {
+      SchemaReporter.reportTerminal(validationResult);
+      if (options.output) {
+        if (options.output.endsWith('.sarif')) {
+          SchemaReporter.reportSarif(validationResult, options.output);
+        } else {
+          SchemaReporter.reportJson(validationResult, options.output);
+        }
+      }
+    }
+
+  } catch (err: any) {
+    console.error(pc.red(`\nValidation failed: ${err.message}`));
+    process.exit(1);
+  }
+};
+
+program
+  .command('schema')
+  .description('Validate Schema.org structured data')
+  .argument('<url>', 'Target URL')
+  .option('--schema <types>', 'Filter to specific schema types (comma-separated)')
+  .option('--json', 'Output raw JSON')
+  .option('-f, --format <format>', 'Output format: terminal, json, sarif', 'terminal')
+  .option('-o, --output <path>', 'Export to file')
+  .action(schemaAction);
+
+// Alias for backwards compatibility: seocore validate <url>
+program
+  .command('validate')
+  .description('Validate Schema.org structured data (alias for schema)')
+  .argument('<url>', 'Target URL')
+  .option('--schema <types>', 'Filter to specific schema types (comma-separated)')
+  .option('--json', 'Output raw JSON')
+  .option('-f, --format <format>', 'Output format: terminal, json, sarif', 'terminal')
+  .option('-o, --output <path>', 'Export to file')
+  .action(schemaAction);
 
 program.parse(process.argv);

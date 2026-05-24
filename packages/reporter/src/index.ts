@@ -582,3 +582,86 @@ export class TerminalReporter {
     console.log(pc.gray('Report completed successfully.\n'));
   }
 }
+
+export class SarifReporter {
+  static export(result: AuditResult, outputPath: string): string {
+    const absolutePath = path.resolve(outputPath);
+    const dir = path.dirname(absolutePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const sarif = this.generateSarif(result);
+    fs.writeFileSync(absolutePath, JSON.stringify(sarif, null, 2), 'utf8');
+    return absolutePath;
+  }
+
+  static generateSarif(result: AuditResult): any {
+    // Map severity to SARIF level
+    const severityToLevel: Record<string, string> = {
+      critical: 'error',
+      error: 'error',
+      warning: 'warning',
+      info: 'note',
+    };
+
+    // Build rules
+    const rules = [
+      {
+        id: 'missing-meta-description',
+        name: 'Missing Meta Description',
+        shortDescription: { text: 'Page is missing a meta description tag.' },
+        fullDescription: { text: 'Meta descriptions are critical for CTR and indexing. Each page should have a unique, 120-160 character description.' },
+        defaultConfiguration: { level: 'warning' },
+        helpUri: 'https://developer.mozilla.org/en-US/docs/Web/HTML/Element/meta/name',
+      },
+      // Add more rules as needed - for now we'll use a generic rule
+    ];
+
+    // Build results
+    const sarifResults = result.findings.map((finding) => ({
+      ruleId: finding.ruleId || 'generic-seo-issue',
+      level: severityToLevel[finding.severity] || 'note',
+      message: { text: finding.message },
+      locations: [
+        {
+          physicalLocation: {
+            artifactLocation: { uri: finding.url },
+            region: { startLine: 1, startColumn: 1 },
+          },
+        },
+      ],
+      fixes: [
+        {
+          description: { text: finding.recommendation },
+        },
+      ],
+    }));
+
+    return {
+      $schema: 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json',
+      version: '2.1.0',
+      runs: [
+        {
+          tool: {
+            driver: {
+              name: 'SEOCORE',
+              version: '1.0.0',
+              informationUri: 'https://github.com/seocore/seocore',
+              rules,
+            },
+          },
+          results: sarifResults,
+          properties: {
+            seocore: {
+              overallScore: result.score,
+              pagesAudited: result.pagesAudited,
+              categoryScores: result.categories,
+            },
+          },
+        },
+      ],
+    };
+  }
+}
+
+export { CompareEngine } from './compare.js';

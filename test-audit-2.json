@@ -1,0 +1,149 @@
+{
+  "url": "https://example.org",
+  "timestamp": "2026-05-24T09:12:12.317Z",
+  "config": {},
+  "score": 72,
+  "categories": {
+    "indexing": {
+      "category": "indexing",
+      "score": 65,
+      "totalDeductions": 35,
+      "findingsCount": {
+        "critical": 1,
+        "error": 2,
+        "warning": 3,
+        "info": 0
+      }
+    },
+    "metadata": {
+      "category": "metadata",
+      "score": 70,
+      "totalDeductions": 30,
+      "findingsCount": {
+        "critical": 0,
+        "error": 2,
+        "warning": 2,
+        "info": 0
+      }
+    },
+    "links": {
+      "category": "links",
+      "score": 75,
+      "totalDeductions": 25,
+      "findingsCount": {
+        "critical": 0,
+        "error": 1,
+        "warning": 4,
+        "info": 0
+      }
+    },
+    "seo": {
+      "category": "seo",
+      "score": 78,
+      "totalDeductions": 22,
+      "findingsCount": {
+        "critical": 0,
+        "error": 1,
+        "warning": 3,
+        "info": 0
+      }
+    },
+    "ai_visibility": {
+      "category": "ai_visibility",
+      "score": 68,
+      "totalDeductions": 32,
+      "findingsCount": {
+        "critical": 1,
+        "error": 1,
+        "warning": 3,
+        "info": 0
+      }
+    },
+    "accessibility": {
+      "category": "accessibility",
+      "score": 70,
+      "totalDeductions": 30,
+      "findingsCount": {
+        "critical": 1,
+        "error": 2,
+        "warning": 2,
+        "info": 0
+      }
+    },
+    "performance": {
+      "category": "performance",
+      "score": 72,
+      "totalDeductions": 28,
+      "findingsCount": {
+        "critical": 0,
+        "error": 2,
+        "warning": 3,
+        "info": 0
+      }
+    },
+    "mobile_seo": {
+      "category": "mobile_seo",
+      "score": 69,
+      "totalDeductions": 31,
+      "findingsCount": {
+        "critical": 1,
+        "error": 2,
+        "warning": 1,
+        "info": 0
+      }
+    },
+    "backlink_intelligence": {
+      "category": "backlink_intelligence",
+      "score": 80,
+      "totalDeductions": 20,
+      "findingsCount": {
+        "critical": 0,
+        "error": 1,
+        "warning": 2,
+        "info": 0
+      }
+    }
+  },
+  "findings": [
+    {
+      "id": "test3",
+      "ruleId": "test-rule-3",
+      "severity": "critical",
+      "category": "indexing",
+      "url": "https://example.org",
+      "message": "No sitemap found",
+      "recommendation": "Create and submit a sitemap.xml"
+    },
+    {
+      "id": "test4",
+      "ruleId": "test-rule-4",
+      "severity": "error",
+      "category": "metadata",
+      "url": "https://example.org",
+      "message": "Missing meta description",
+      "recommendation": "Add a unique meta description"
+    },
+    {
+      "id": "test5",
+      "ruleId": "test-rule-5",
+      "severity": "critical",
+      "category": "ai_visibility",
+      "url": "https://example.org",
+      "message": "No structured data",
+      "recommendation": "Add schema.org markup to key pages"
+    }
+  ],
+  "pagesAudited": 5,
+  "totalLoadTimeMs": 4200,
+  "pages": {},
+  "crawlGraph": {
+    "nodes": [],
+    "edges": [],
+    "metrics": {
+      "maxDepth": 2,
+      "orphanCount": 2,
+      "hubPages": [],
+      "authorityNodes": []
+    }
+  }
+}

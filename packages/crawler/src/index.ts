@@ -240,6 +240,120 @@ export class SitemapParser {
 }
 
 // ==========================================
+// LLMS.TXT PARSER
+// ==========================================
+
+export interface LlmsTxtSection {
+  userAgents: string[];
+  allows: string[];
+  disallows: string[];
+}
+
+export interface LlmsTxtParseResult {
+  sections: LlmsTxtSection[];
+  totalAllowRules: number;
+  totalDisallowRules: number;
+  parseErrors: string[];
+}
+
+export class LlmsTxtParser {
+  static parse(content: string): LlmsTxtParseResult {
+    const sections: LlmsTxtSection[] = [];
+    const errors: string[] = [];
+    let currentSection: LlmsTxtSection | null = null;
+    let totalAllows = 0;
+    let totalDisallows = 0;
+
+    const lines = content.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line || line.startsWith('#')) continue;
+
+      const colonIndex = line.indexOf(':');
+      if (colonIndex === -1) {
+        errors.push(`Line ${i + 1}: Invalid format (missing colon)`);
+        continue;
+      }
+
+      const key = line.substring(0, colonIndex).trim().toLowerCase();
+      const value = line.substring(colonIndex + 1).trim();
+
+      if (key === 'user-agent') {
+        if (currentSection) {
+          sections.push(currentSection);
+        }
+        currentSection = {
+          userAgents: [value.toLowerCase()],
+          allows: [],
+          disallows: [],
+        };
+      } else if (key === 'allow') {
+        if (currentSection) {
+          currentSection.allows.push(value);
+          totalAllows++;
+        } else {
+          errors.push(`Line ${i + 1}: Allow rule before any User-agent`);
+        }
+      } else if (key === 'disallow') {
+        if (currentSection) {
+          currentSection.disallows.push(value);
+          totalDisallows++;
+        } else {
+          errors.push(`Line ${i + 1}: Disallow rule before any User-agent`);
+        }
+      } else {
+        errors.push(`Line ${i + 1}: Unknown directive "${key}"`);
+      }
+    }
+
+    if (currentSection) {
+      sections.push(currentSection);
+    }
+
+    return {
+      sections,
+      totalAllowRules: totalAllows,
+      totalDisallowRules: totalDisallows,
+      parseErrors: errors,
+    };
+  }
+
+  static getBotStatus(
+    parseResult: LlmsTxtParseResult,
+    botName: string
+  ): { status: 'allowed' | 'disallowed' | 'implicit'; allowedPaths: string[]; blockedPaths: string[] } {
+    const botLower = botName.toLowerCase();
+    let targetSection: LlmsTxtSection | null = null;
+    let wildcardSection: LlmsTxtSection | null = null;
+
+    for (const section of parseResult.sections) {
+      for (const ua of section.userAgents) {
+        if (ua === botLower) {
+          targetSection = section;
+          break;
+        }
+        if (ua === '*') {
+          wildcardSection = section;
+        }
+      }
+      if (targetSection) break;
+    }
+
+    const sectionToUse = targetSection || wildcardSection;
+
+    if (!sectionToUse) {
+      return { status: 'implicit', allowedPaths: [], blockedPaths: [] };
+    }
+
+    return {
+      status: sectionToUse.allows.length > 0 ? 'allowed' : (sectionToUse.disallows.length > 0 ? 'disallowed' : 'implicit'),
+      allowedPaths: [...sectionToUse.allows],
+      blockedPaths: [...sectionToUse.disallows],
+    };
+  }
+}
+
+// ==========================================
 // HTTP CRAWLER
 // ==========================================
 
@@ -381,6 +495,17 @@ export class PlaywrightCrawler implements Crawler {
   async crawl(url: string, config: SeoConfig): Promise<CrawlResult> {
     const startTime = Date.now();
     try {
+      // Get raw static HTML first using HttpCrawler
+      let rawHtml: string | undefined;
+      try {
+        const httpResult = await this.httpCrawler.crawl(url, config);
+        if (httpResult.statusCode === 200) {
+          rawHtml = httpResult.html;
+        }
+      } catch {
+        // ignore
+      }
+
       // Dynamic import of playwright-core or playwright to avoid heavy required install
       // If user has it, we use it, otherwise fallback to HTTP crawler with warning
       let playwright;
@@ -463,6 +588,7 @@ export class PlaywrightCrawler implements Crawler {
       return {
         url,
         html,
+        rawHtml,
         statusCode,
         loadTimeMs,
         contentType,

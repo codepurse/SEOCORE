@@ -260,6 +260,7 @@ export interface RuleEvaluationContext {
 export interface CrawlResult {
   url: string;
   html?: string;
+  rawHtml?: string;
   statusCode: number;
   loadTimeMs: number;
   contentType: string;

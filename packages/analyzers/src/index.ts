@@ -1,5 +1,12 @@
 import * as cheerio from 'cheerio';
 import { CrawlResult, NormalizedPage } from '@seocore/sdk';
+import { extractMicrodata, extractRDFa, mergeSchemas } from './html-extractors.js';
+export { SchemaValidator } from './schema-validator.js';
+export type { SchemaIssue, ValidatedSchema, SchemaValidationResult } from './schema-validator.js';
+export { SchemaGraphStitcher } from './schema-graph.js';
+export type { GraphNode, HierarchyNode } from './schema-graph.js';
+export { DynamicOntologyParser } from './ontology-parser.js';
+export type { OntologyType, OntologyProperty } from './ontology-parser.js';
 
 export class PageNormalizer {
   static normalize(result: CrawlResult): NormalizedPage {
@@ -141,19 +148,47 @@ export class PageNormalizer {
         }
       });
 
-      // 9. Structured Data (JSON-LD)
-      $('script[type="application/ld+json"]').each((_, el) => {
-        const rawJson = $(el).html();
-        if (rawJson) {
-          try {
-            const parsed = JSON.parse(rawJson.trim());
-            normalized.structuredData.push(parsed);
-          } catch {
-            // Push invalid JSON as-is or null for the rules engine to flag
-            normalized.structuredData.push({ __error: 'Invalid JSON-LD syntax', raw: rawJson });
+      // 9. Structured Data (JSON-LD, Microdata, RDFa)
+      const allExtracted: any[] = [];
+
+      const extractJsonLd = (doc: cheerio.CheerioAPI): any[] => {
+        const jsonLds: any[] = [];
+        doc('script[type="application/ld+json"]').each((_, el) => {
+          const rawJson = doc(el).html();
+          if (rawJson) {
+            try {
+              const parsed = JSON.parse(rawJson.trim());
+              if (Array.isArray(parsed)) {
+                jsonLds.push(...parsed);
+              } else if (parsed && parsed['@graph'] && Array.isArray(parsed['@graph'])) {
+                jsonLds.push(...parsed['@graph']);
+              } else {
+                jsonLds.push(parsed);
+              }
+            } catch {
+              jsonLds.push({ __error: 'Invalid JSON-LD syntax', raw: rawJson });
+            }
           }
+        });
+        return jsonLds;
+      };
+
+      allExtracted.push(...extractJsonLd($));
+      allExtracted.push(...extractMicrodata($));
+      allExtracted.push(...extractRDFa($));
+
+      if (result.rawHtml && result.rawHtml !== html) {
+        try {
+          const $raw = cheerio.load(result.rawHtml);
+          allExtracted.push(...extractJsonLd($raw));
+          allExtracted.push(...extractMicrodata($raw));
+          allExtracted.push(...extractRDFa($raw));
+        } catch {
+          // ignore
         }
-      });
+      }
+
+      normalized.structuredData = mergeSchemas(allExtracted);
 
       // 10. OpenGraph
       const openGraph: Record<string, string> = {};
