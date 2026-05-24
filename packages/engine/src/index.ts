@@ -1,5 +1,6 @@
 import {
   AuditResult,
+  BacklinkIntelligenceData,
   Crawler,
   EventBus,
   NormalizedPage,
@@ -8,9 +9,10 @@ import {
   RuleDefinition
 } from '@seocore/sdk';
 import { resolveConfig } from '@seocore/config';
+import { createBacklinkClient } from '@seocore/backlinks';
 import PQueue from 'p-queue';
 import Bottleneck from 'bottleneck';
-import { HttpCrawler, PlaywrightCrawler, RobotsTxt, SitemapParser } from '@seocore/crawler';
+import { HttpCrawler, PlaywrightCrawler, LighthouseCrawler, RobotsTxt, SitemapParser } from '@seocore/crawler';
 import { PageNormalizer } from '@seocore/analyzers';
 import { RuleEngine } from '@seocore/rules';
 import { ScoringEngine } from '@seocore/scoring';
@@ -61,7 +63,13 @@ export class SeoEngine {
     const config = resolveConfig(partialConfig);
 
     // Instantiate crawler based on config
-    this.crawler = config.playwrightEnabled ? new PlaywrightCrawler() : new HttpCrawler();
+    if (config.lighthouseEnabled) {
+      this.crawler = new LighthouseCrawler();
+    } else if (config.playwrightEnabled) {
+      this.crawler = new PlaywrightCrawler();
+    } else {
+      this.crawler = new HttpCrawler();
+    }
 
     // 1. Run lifecycle hook: onInit
     for (const plugin of this.plugins) {
@@ -76,6 +84,8 @@ export class SeoEngine {
     const visited = new Set<string>();
     const queued = new Set<string>();
     const pages: Record<string, NormalizedPage> = {};
+    let lighthousePagesCrawled = 0;
+    const httpCrawler = new HttpCrawler();
 
     let robotsTxt: RobotsTxt | null = null;
     let robotsTxtFound = false;
@@ -85,7 +95,7 @@ export class SeoEngine {
     // Step A: Pre-crawl fetch robots.txt and sitemap.xml
     try {
       const robotsUrl = `${domain}/robots.txt`;
-      const robotsResult = await new HttpCrawler().crawl(robotsUrl, config);
+      const robotsResult = await httpCrawler.crawl(robotsUrl, config);
       if (robotsResult.statusCode === 200 && robotsResult.html) {
         robotsTxt = new RobotsTxt(robotsResult.html);
         robotsTxtFound = true;
@@ -96,7 +106,7 @@ export class SeoEngine {
 
     try {
       const sitemapUrl = `${domain}/sitemap.xml`;
-      const sitemapResult = await new HttpCrawler().crawl(sitemapUrl, config);
+      const sitemapResult = await httpCrawler.crawl(sitemapUrl, config);
       if (sitemapResult.statusCode === 200 && sitemapResult.html) {
         sitemapXmlFound = true;
         sitemapUrls = SitemapParser.parse(sitemapResult.html);
@@ -148,7 +158,17 @@ export class SeoEngine {
         }
 
         try {
-          const crawlResult = await limiter.schedule(() => this.crawler.crawl(finalUrl, config));
+          let crawlResult;
+          if (config.lighthouseEnabled && config.lighthouseSampleCount !== undefined && lighthousePagesCrawled >= config.lighthouseSampleCount) {
+            // We've hit the sample limit, use HTTP crawler
+            crawlResult = await limiter.schedule(() => httpCrawler.crawl(finalUrl, config));
+          } else {
+            // Use configured crawler
+            crawlResult = await limiter.schedule(() => this.crawler.crawl(finalUrl, config));
+            if (config.lighthouseEnabled) {
+              lighthousePagesCrawled++;
+            }
+          }
           visited.add(url);
 
           await this.eventBus.emit('page:loaded', {
@@ -204,8 +224,20 @@ export class SeoEngine {
       }
     }
 
+    let backlinkData: BacklinkIntelligenceData | undefined;
+    let backlinkError: string | undefined;
+
+    if (config.backlinks) {
+      try {
+        const backlinkClient = createBacklinkClient(config.backlinks);
+        backlinkData = await backlinkClient.getIntelligence(startUrl, 250);
+      } catch (err: any) {
+        backlinkError = err.message;
+      }
+    }
+
     // 3. Evaluate SEO Rules
-    let findings = await this.ruleEngine.run(pages, config);
+    let findings = await this.ruleEngine.run(pages, config, backlinkData, backlinkError);
 
     // 4. Run lifecycle hook: onAfterAnalysis (allowing mutations)
     for (const plugin of this.plugins) {
@@ -237,6 +269,7 @@ export class SeoEngine {
       totalLoadTimeMs,
       pages,
       crawlGraph,
+      backlinkData,
     };
 
     // 6. Run lifecycle hook: onComplete
@@ -247,6 +280,15 @@ export class SeoEngine {
     }
 
     await this.eventBus.emit('audit:complete', { result: auditResult });
+
+    // Clean up crawler resources
+    if ('close' in this.crawler && typeof this.crawler.close === 'function') {
+      try {
+        await this.crawler.close();
+      } catch (err) {
+        console.warn(`[Engine] Error cleaning up crawler:`, err);
+      }
+    }
 
     return auditResult;
   }

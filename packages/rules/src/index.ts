@@ -26,6 +26,22 @@ export function getRuleSettings(def: RuleDefinition, config: SeoConfig) {
   return { enabled, severity, weight };
 }
 
+function hasConfiguredBacklinkSources(config: SeoConfig): boolean {
+  const backlinks = config.backlinks;
+  if (!backlinks?.provider) return false;
+
+  const hasBing = backlinks.bing?.enabled !== false && !!backlinks.bing?.apiKey;
+  const hasGsc = backlinks.gsc?.enabled !== false && !!backlinks.gsc?.exportPath;
+  const hasLogs = backlinks.logs?.enabled !== false && (backlinks.logs?.paths?.length ?? 0) > 0;
+
+  return hasBing || hasGsc || hasLogs;
+}
+
+function getPrimaryBacklinkPage(page: NormalizedPage, context: RuleEvaluationContext): boolean {
+  const allPageUrls = Object.keys(context.allPages);
+  return page.url === allPageUrls[0];
+}
+
 // ==========================================
 // CORE RULES IMPLEMENTATION
 // ==========================================
@@ -1931,6 +1947,681 @@ export class MobileIndexingReadinessRule implements Rule {
   }
 }
 
+// 28. Backlink Intelligence: Missing External Backlink Data Rule
+export class MissingBacklinkDataRule implements Rule {
+  definition: RuleDefinition = {
+    id: 'missing-backlink-data',
+    name: 'Missing Backlink Intelligence Data',
+    description: 'Alerts when external backlink data sources are not configured, falling back to mock analysis mode.',
+    category: 'backlink_intelligence',
+    defaultSeverity: 'info',
+    defaultWeight: 2,
+    documentationLink: 'https://seocore.dev/docs/rules/missing-backlink-data',
+  };
+
+  async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
+    const { enabled, severity } = getRuleSettings(this.definition, context.config);
+    if (!enabled) return [];
+
+    if (!getPrimaryBacklinkPage(page, context)) {
+      return [];
+    }
+
+    if ((context.backlinkData?.sources.length ?? 0) > 0) {
+      return [];
+    }
+
+    if (context.backlinkError) {
+      return [
+        {
+          id: createFindingId(this.definition.id, page.url, 'source-error'),
+          ruleId: this.definition.id,
+          severity,
+          category: this.definition.category,
+          url: page.url,
+          message: 'Backlink intelligence source configured, but audit could not load data.',
+          recommendation: 'Check Bing credentials, verified site URL, GSC export path, and log file paths. Then rerun audit.',
+          evidence: context.backlinkError,
+          documentationLink: this.definition.documentationLink,
+        }
+      ];
+    }
+
+    if (hasConfiguredBacklinkSources(context.config)) {
+      return [];
+    }
+
+    return [
+      {
+        id: createFindingId(this.definition.id, page.url),
+        ruleId: this.definition.id,
+        severity,
+        category: this.definition.category,
+        url: page.url,
+        message: 'Backlink intelligence running without configured Bing, GSC export, or access-log sources.',
+        recommendation: 'Configure Bing Webmaster data, import a GSC links export, or point SEOCORE at access logs for first-party backlink coverage.',
+        evidence: 'No backlink source configured.',
+        documentationLink: this.definition.documentationLink,
+      }
+    ];
+  }
+}
+
+// 29. Backlink Intelligence: Anchor Text Over-Optimization Rule
+export class AnchorTextOverOptimizationRule implements Rule {
+  definition: RuleDefinition = {
+    id: 'anchor-text-over-optimization',
+    name: 'Potential Anchor Text Over-Optimization',
+    description: 'Evaluates anchor text distribution and alerts on potential over-optimization patterns.',
+    category: 'backlink_intelligence',
+    defaultSeverity: 'warning',
+    defaultWeight: 5,
+    documentationLink: 'https://seocore.dev/docs/rules/anchor-text-over-optimization',
+  };
+
+  async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
+    const { enabled, severity } = getRuleSettings(this.definition, context.config);
+    if (!enabled) return [];
+
+    if (!getPrimaryBacklinkPage(page, context)) {
+      return [];
+    }
+
+    const findings: Finding[] = [];
+    const anchorTextCounts: Record<string, number> = {};
+
+    if ((context.backlinkData?.backlinks.length ?? 0) > 0) {
+      for (const backlink of context.backlinkData!.backlinks) {
+        const anchor = backlink.anchorText.toLowerCase().trim();
+        if (anchor.length === 0) continue;
+        anchorTextCounts[anchor] = (anchorTextCounts[anchor] || 0) + 1;
+      }
+    } else {
+      const internalLinks = page.links.filter(link => link.isInternal);
+      internalLinks.forEach(link => {
+        const anchor = link.text.toLowerCase().trim();
+        if (anchor.length > 0) {
+          anchorTextCounts[anchor] = (anchorTextCounts[anchor] || 0) + 1;
+        }
+      });
+    }
+
+    const totalAnchors = Object.values(anchorTextCounts).reduce((sum, count) => sum + count, 0);
+    const overusedAnchors = Object.entries(anchorTextCounts)
+      .filter(([_, count]) => count >= 4 || (totalAnchors > 0 && count / totalAnchors >= 0.5));
+
+    if (overusedAnchors.length > 0) {
+      const usingExternalData = (context.backlinkData?.backlinks.length ?? 0) > 0;
+      findings.push({
+        id: createFindingId(this.definition.id, page.url),
+        ruleId: this.definition.id,
+        severity,
+        category: this.definition.category,
+        url: page.url,
+        message: `${usingExternalData ? 'Backlink' : 'Internal'} anchor text shows potential overuse of ${overusedAnchors.length} phrases.`,
+        recommendation: 'Diversify your anchor text distribution to avoid appearing manipulative. Use natural, branded, and partial-match anchors.',
+        evidence: `Overused anchors (${usingExternalData ? 'backlinks' : 'internal links'}): ${overusedAnchors.slice(0, 3).map(([text, count]) => `"${text}" (${count}x)`).join(', ')}`,
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    return findings;
+  }
+}
+
+// 30. Backlink Intelligence: Low Authority Backlinks Risk
+export class LowAuthorityBacklinksRule implements Rule {
+  definition: RuleDefinition = {
+    id: 'low-authority-backlinks',
+    name: 'Potential Low-Quality/Spammy Backlink Risk',
+    description: 'Alerts to potential low-quality or toxic backlink risks.',
+    category: 'backlink_intelligence',
+    defaultSeverity: 'warning',
+    defaultWeight: 4,
+    documentationLink: 'https://seocore.dev/docs/rules/low-authority-backlinks',
+  };
+
+  async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
+    const { enabled, severity } = getRuleSettings(this.definition, context.config);
+    if (!enabled) return [];
+
+    if (!getPrimaryBacklinkPage(page, context)) {
+      return [];
+    }
+
+    const findings: Finding[] = [];
+    const backlinks = context.backlinkData?.backlinks ?? [];
+    const metricsAvailable = context.backlinkData?.domainMetrics.authorityMetricsAvailable ?? false;
+
+    if (backlinks.length === 0) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url),
+        ruleId: this.definition.id,
+        severity: 'info',
+        category: this.definition.category,
+        url: page.url,
+        message: 'Backlink quality analysis has no loaded backlink records for this audit.',
+        recommendation: 'Load Bing, GSC export, or access-log backlink data to evaluate source quality and link risk.',
+        evidence: context.backlinkError ?? 'No backlink records loaded.',
+        documentationLink: this.definition.documentationLink,
+      });
+      return findings;
+    }
+
+    if (!metricsAvailable) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'limited-metrics'),
+        ruleId: this.definition.id,
+        severity: 'info',
+        category: this.definition.category,
+        url: page.url,
+        message: 'Backlink source quality metrics are limited for current first-party sources.',
+        recommendation: 'Use anchor distribution, referring-domain diversity, and manual spot checks for quality review. Authority scoring requires source-level quality metrics.',
+        evidence: `Loaded ${backlinks.length} backlinks from ${context.backlinkData?.sources.join(', ')} without authority or spam metrics.`,
+        documentationLink: this.definition.documentationLink,
+      });
+      return findings;
+    }
+
+    const riskyBacklinks = backlinks.filter(backlink => {
+      const domainAuthority = backlink.domainAuthority ?? 100;
+      const spamScore = backlink.spamScore ?? 0;
+      return domainAuthority <= 15 || spamScore >= 50;
+    });
+
+    if (riskyBacklinks.length >= 3 || riskyBacklinks.length / backlinks.length >= 0.35) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'risky-profile'),
+        ruleId: this.definition.id,
+        severity,
+        category: this.definition.category,
+        url: page.url,
+        message: `${riskyBacklinks.length} backlinks show potentially low-authority or spam-heavy signals.`,
+        recommendation: 'Review suspicious referring domains, audit anchor intent, and disavow only when manual review confirms manipulative link patterns.',
+        evidence: riskyBacklinks
+          .slice(0, 3)
+          .map(backlink => `${backlink.sourceUrl} (DA ${backlink.domainAuthority ?? 'n/a'}, Spam ${backlink.spamScore ?? 'n/a'})`)
+          .join(', '),
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    return findings;
+  }
+}
+
+// 31. Backlink Intelligence: Missing High-Authority Backlinks
+export class MissingHighAuthorityBacklinksRule implements Rule {
+  definition: RuleDefinition = {
+    id: 'missing-high-authority-backlinks',
+    name: 'Missing High-Authority Backlinks',
+    description: 'Alerts when the site has very few or no backlinks from high-authority domains.',
+    category: 'backlink_intelligence',
+    defaultSeverity: 'warning',
+    defaultWeight: 4,
+    documentationLink: 'https://seocore.dev/docs/rules/missing-high-authority-backlinks',
+  };
+
+  async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
+    const { enabled, severity } = getRuleSettings(this.definition, context.config);
+    if (!enabled) return [];
+
+    if (!getPrimaryBacklinkPage(page, context)) {
+      return [];
+    }
+
+    const backlinkData = context.backlinkData;
+    if (!backlinkData || backlinkData.backlinks.length === 0) {
+      return [];
+    }
+
+    if (!backlinkData.domainMetrics.authorityMetricsAvailable) {
+      return [];
+    }
+
+    const highAuthorityCount = backlinkData.backlinks.filter(backlink => (backlink.domainAuthority ?? 0) >= 60).length;
+    if (highAuthorityCount >= 3) {
+      return [];
+    }
+
+    return [
+      {
+        id: createFindingId(this.definition.id, page.url),
+        ruleId: this.definition.id,
+        severity,
+        category: this.definition.category,
+        url: page.url,
+        message: 'Very few backlinks come from high-authority referring domains.',
+        recommendation: 'Prioritize digital PR, expert citations, and partnerships that attract links from trusted industry publications and institutions.',
+        evidence: `High-authority backlinks detected: ${highAuthorityCount}.`,
+        documentationLink: this.definition.documentationLink,
+      }
+    ];
+  }
+}
+
+// 32. OpenGraph/Twitter Card Validation Rule
+export class SocialMetaRule implements Rule {
+  definition: RuleDefinition = {
+    id: 'social-meta',
+    name: 'Missing or Incomplete Social Meta Tags',
+    description: 'Validates OpenGraph and Twitter Card meta tags for social sharing and AI crawler visibility.',
+    category: 'metadata',
+    defaultSeverity: 'warning',
+    defaultWeight: 6,
+    documentationLink: 'https://seocore.dev/docs/rules/social-meta',
+  };
+
+  async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
+    const { enabled, severity } = getRuleSettings(this.definition, context.config);
+    if (!enabled) return [];
+
+    const findings: Finding[] = [];
+
+    // Check OpenGraph
+    const og = page.openGraph;
+    if (!og || Object.keys(og).length === 0) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'missing-og'),
+        ruleId: this.definition.id,
+        severity,
+        category: this.definition.category,
+        url: page.url,
+        message: 'Page is missing OpenGraph meta tags.',
+        recommendation: 'Add OpenGraph tags (og:title, og:description, og:image, og:url) to enhance social sharing and AI crawler visibility.',
+        documentationLink: this.definition.documentationLink,
+      });
+    } else {
+      if (!og.title) {
+        findings.push({
+          id: createFindingId(this.definition.id, page.url, 'missing-og-title'),
+          ruleId: this.definition.id,
+          severity,
+          category: this.definition.category,
+          url: page.url,
+          message: 'OpenGraph is missing og:title tag.',
+          recommendation: 'Add an og:title meta tag to your page.',
+          documentationLink: this.definition.documentationLink,
+        });
+      }
+      if (!og.description) {
+        findings.push({
+          id: createFindingId(this.definition.id, page.url, 'missing-og-description'),
+          ruleId: this.definition.id,
+          severity,
+          category: this.definition.category,
+          url: page.url,
+          message: 'OpenGraph is missing og:description tag.',
+          recommendation: 'Add an og:description meta tag to your page.',
+          documentationLink: this.definition.documentationLink,
+        });
+      }
+      if (!og.image) {
+        findings.push({
+          id: createFindingId(this.definition.id, page.url, 'missing-og-image'),
+          ruleId: this.definition.id,
+          severity,
+          category: this.definition.category,
+          url: page.url,
+          message: 'OpenGraph is missing og:image tag.',
+          recommendation: 'Add an og:image meta tag to your page with a relevant, high-quality image.',
+          documentationLink: this.definition.documentationLink,
+        });
+      }
+      if (!og.url) {
+        findings.push({
+          id: createFindingId(this.definition.id, page.url, 'missing-og-url'),
+          ruleId: this.definition.id,
+          severity,
+          category: this.definition.category,
+          url: page.url,
+          message: 'OpenGraph is missing og:url tag.',
+          recommendation: 'Add an og:url meta tag to your page with the canonical URL.',
+          documentationLink: this.definition.documentationLink,
+        });
+      }
+    }
+
+    // Check Twitter Card
+    const twitter = page.twitterCard;
+    if (!twitter || Object.keys(twitter).length === 0) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'missing-twitter'),
+        ruleId: this.definition.id,
+        severity: 'info',
+        category: this.definition.category,
+        url: page.url,
+        message: 'Page is missing Twitter Card meta tags.',
+        recommendation: 'Add Twitter Card tags (twitter:card, twitter:title, twitter:description, twitter:image) to enhance Twitter sharing.',
+        documentationLink: this.definition.documentationLink,
+      });
+    } else {
+      if (!twitter.card) {
+        findings.push({
+          id: createFindingId(this.definition.id, page.url, 'missing-twitter-card'),
+          ruleId: this.definition.id,
+          severity: 'info',
+          category: this.definition.category,
+          url: page.url,
+          message: 'Twitter Card is missing twitter:card tag.',
+          recommendation: 'Add a twitter:card meta tag (e.g., summary_large_image, summary).',
+          documentationLink: this.definition.documentationLink,
+        });
+      }
+    }
+
+    return findings;
+  }
+}
+
+// 33. Hreflang Validation Rule
+export class HreflangRule implements Rule {
+  definition: RuleDefinition = {
+    id: 'hreflang',
+    name: 'Hreflang Validation',
+    description: 'Validates hreflang tags including self-references, language codes, and alternate URLs.',
+    category: 'indexing',
+    defaultSeverity: 'warning',
+    defaultWeight: 7,
+    documentationLink: 'https://seocore.dev/docs/rules/hreflang',
+  };
+
+  async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
+    const { enabled, severity } = getRuleSettings(this.definition, context.config);
+    if (!enabled) return [];
+
+    const findings: Finding[] = [];
+    const hreflangs = page.hreflang;
+
+    if (hreflangs.length === 0) {
+      return findings;
+    }
+
+    // Check for self-referential hreflang
+    const hasSelfReference = hreflangs.some(h => h.url === page.url);
+    if (!hasSelfReference) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'missing-self-reference'),
+        ruleId: this.definition.id,
+        severity,
+        category: this.definition.category,
+        url: page.url,
+        message: 'Page is missing a self-referential hreflang tag.',
+        recommendation: 'Add a hreflang tag that references the current page URL with the appropriate language code.',
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    // Check for x-default
+    const hasXDefault = hreflangs.some(h => h.lang === 'x-default');
+    if (!hasXDefault && hreflangs.length > 1) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'missing-x-default'),
+        ruleId: this.definition.id,
+        severity: 'info',
+        category: this.definition.category,
+        url: page.url,
+        message: 'Page is missing an x-default hreflang tag.',
+        recommendation: 'Consider adding an x-default hreflang tag for users with unspecified languages.',
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    // Validate language codes (basic check: should be 2 letters or 2-2 format)
+    const langCodeRegex = /^[a-z]{2}(-[A-Z]{2})?$|^x-default$/;
+    for (const hreflang of hreflangs) {
+      if (!langCodeRegex.test(hreflang.lang)) {
+        findings.push({
+          id: createFindingId(this.definition.id, page.url, `invalid-lang-${hreflang.lang}`),
+          ruleId: this.definition.id,
+          severity,
+          category: this.definition.category,
+          url: page.url,
+          message: `Invalid language code: "${hreflang.lang}".`,
+          recommendation: 'Use valid ISO 639-1 language codes (optionally with ISO 3166-1 region codes, e.g., en-US).',
+          evidence: `Invalid code: ${hreflang.lang}`,
+          documentationLink: this.definition.documentationLink,
+        });
+      }
+    }
+
+    return findings;
+  }
+}
+
+// 34. Security/HTTPS Rule
+export class SecurityRule implements Rule {
+  definition: RuleDefinition = {
+    id: 'security',
+    name: 'Security & HTTPS Validation',
+    description: 'Checks for HTTPS, mixed content, HSTS, and insecure forms.',
+    category: 'seo',
+    defaultSeverity: 'error',
+    defaultWeight: 8,
+    documentationLink: 'https://seocore.dev/docs/rules/security',
+  };
+
+  async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
+    const { enabled, severity } = getRuleSettings(this.definition, context.config);
+    if (!enabled) return [];
+
+    const findings: Finding[] = [];
+
+    // Check HTTPS
+    if (page.url.startsWith('http:')) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'not-https'),
+        ruleId: this.definition.id,
+        severity: 'critical',
+        category: this.definition.category,
+        url: page.url,
+        message: 'Page is not served over HTTPS.',
+        recommendation: 'Enable HTTPS on your website and redirect all HTTP traffic to HTTPS.',
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    // Check for mixed content if page is HTML and we have the HTML
+    if (page.html) {
+      const $ = cheerio.load(page.html);
+      const mixedContent: string[] = [];
+
+      // Check for http:// resources
+      $('img[src^="http:"]').each((_, el) => {
+        mixedContent.push($(el).attr('src') || '');
+      });
+      $('script[src^="http:"]').each((_, el) => {
+        mixedContent.push($(el).attr('src') || '');
+      });
+      $('link[rel="stylesheet"][href^="http:"]').each((_, el) => {
+        mixedContent.push($(el).attr('href') || '');
+      });
+      $('iframe[src^="http:"]').each((_, el) => {
+        mixedContent.push($(el).attr('src') || '');
+      });
+
+      if (mixedContent.length > 0) {
+        findings.push({
+          id: createFindingId(this.definition.id, page.url, 'mixed-content'),
+          ruleId: this.definition.id,
+          severity,
+          category: this.definition.category,
+          url: page.url,
+          message: `Page contains ${mixedContent.length} mixed content resources.`,
+          recommendation: 'Update all resources to use HTTPS URLs.',
+          evidence: `Sample resources: ${mixedContent.slice(0, 3).join(', ')}`,
+          documentationLink: this.definition.documentationLink,
+        });
+      }
+
+      // Check for HSTS
+      const hasHsts = $('meta[http-equiv="Strict-Transport-Security"]').length > 0;
+      if (!hasHsts && page.url.startsWith('https:')) {
+        findings.push({
+          id: createFindingId(this.definition.id, page.url, 'missing-hsts'),
+          ruleId: this.definition.id,
+          severity: 'warning',
+          category: this.definition.category,
+          url: page.url,
+          message: 'Page is missing HSTS (HTTP Strict Transport Security) header or meta tag.',
+          recommendation: 'Add an HSTS header to enforce HTTPS connections.',
+          documentationLink: this.definition.documentationLink,
+        });
+      }
+
+      // Check for insecure forms
+      $('form[action^="http:"]').each((_, el) => {
+        findings.push({
+          id: createFindingId(this.definition.id, page.url, 'insecure-form'),
+          ruleId: this.definition.id,
+          severity,
+          category: this.definition.category,
+          url: page.url,
+          message: 'Page contains a form that submits to an insecure HTTP URL.',
+          recommendation: 'Update the form action to use HTTPS.',
+          evidence: `Form action: ${$(el).attr('action')}`,
+          documentationLink: this.definition.documentationLink,
+        });
+      });
+    }
+
+    return findings;
+  }
+}
+
+// 35. Content Quality Rule
+export class ContentQualityRule implements Rule {
+  definition: RuleDefinition = {
+    id: 'content-quality',
+    name: 'Content Quality Assessment',
+    description: 'Checks for thin content and duplicate content across pages.',
+    category: 'seo',
+    defaultSeverity: 'warning',
+    defaultWeight: 7,
+    documentationLink: 'https://seocore.dev/docs/rules/content-quality',
+  };
+
+  async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
+    const { enabled, severity } = getRuleSettings(this.definition, context.config);
+    if (!enabled || !page.html) return [];
+
+    const findings: Finding[] = [];
+    const $ = cheerio.load(page.html);
+
+    // Calculate word count
+    const bodyText = $('body').text().trim();
+    const wordCount = bodyText.split(/\s+/).filter(word => word.length > 0).length;
+
+    // Check for thin content
+    if (wordCount < 300) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'thin-content'),
+        ruleId: this.definition.id,
+        severity,
+        category: this.definition.category,
+        url: page.url,
+        message: 'Page has thin content.',
+        recommendation: 'Add more unique, valuable content to the page to improve its quality and relevance.',
+        evidence: `Word count: ${wordCount}`,
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    // Check for duplicate content (simple check: compare title and meta description with other pages)
+    const duplicatePages: string[] = [];
+    for (const [url, otherPage] of Object.entries(context.allPages)) {
+      if (url !== page.url) {
+        if (page.title && otherPage.title && page.title.toLowerCase() === otherPage.title.toLowerCase()) {
+          duplicatePages.push(url);
+        }
+      }
+    }
+
+    if (duplicatePages.length > 0) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'duplicate-title'),
+        ruleId: this.definition.id,
+        severity,
+        category: this.definition.category,
+        url: page.url,
+        message: `Page title is duplicated on ${duplicatePages.length} other page(s).`,
+        recommendation: 'Write unique titles for each page to help search engines distinguish them.',
+        evidence: `Duplicate pages: ${duplicatePages.slice(0, 3).join(', ')}`,
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    return findings;
+  }
+}
+
+// 36. Internal Linking Optimization Rule
+export class InternalLinkingRule implements Rule {
+  definition: RuleDefinition = {
+    id: 'internal-linking',
+    name: 'Internal Linking Optimization',
+    description: 'Checks for pages with no outbound links, excessive links, and link depth.',
+    category: 'links',
+    defaultSeverity: 'warning',
+    defaultWeight: 5,
+    documentationLink: 'https://seocore.dev/docs/rules/internal-linking',
+  };
+
+  async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
+    const { enabled, severity } = getRuleSettings(this.definition, context.config);
+    if (!enabled) return [];
+
+    const findings: Finding[] = [];
+    const internalLinks = page.links.filter(link => link.isInternal);
+
+    // Check for no outbound internal links
+    if (internalLinks.length === 0) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'no-outbound-links'),
+        ruleId: this.definition.id,
+        severity,
+        category: this.definition.category,
+        url: page.url,
+        message: 'Page has no outbound internal links.',
+        recommendation: 'Add relevant internal links to other pages on your site to improve navigation and crawlability.',
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    // Check for excessive links
+    if (page.links.length > 100) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'excessive-links'),
+        ruleId: this.definition.id,
+        severity: 'info',
+        category: this.definition.category,
+        url: page.url,
+        message: `Page has ${page.links.length} links, which is quite high.`,
+        recommendation: 'Consider reducing the number of links on the page to focus on the most important ones.',
+        evidence: `Link count: ${page.links.length}`,
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    // Check link depth
+    if (page.depth && page.depth > 3) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'deep-link'),
+        ruleId: this.definition.id,
+        severity: 'info',
+        category: this.definition.category,
+        url: page.url,
+        message: `Page is ${page.depth} clicks away from the homepage.`,
+        recommendation: 'Consider adding links from higher-level pages to reduce the click depth.',
+        evidence: `Depth: ${page.depth}`,
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    return findings;
+  }
+}
+
 // ==========================================
 // RULE ENGINE EXECUTOR
 // ==========================================
@@ -1964,6 +2655,15 @@ export class RuleEngine {
     new MobilePerformanceRule(),
     new MobileResponsiveDesignRule(),
     new MobileIndexingReadinessRule(),
+    new MissingBacklinkDataRule(),
+    new AnchorTextOverOptimizationRule(),
+    new LowAuthorityBacklinksRule(),
+    new MissingHighAuthorityBacklinksRule(),
+    new SocialMetaRule(),
+    new HreflangRule(),
+    new SecurityRule(),
+    new ContentQualityRule(),
+    new InternalLinkingRule(),
   ];
 
   private readonly customRules: Rule[] = [];
@@ -1980,13 +2680,20 @@ export class RuleEngine {
     });
   }
 
-  async run(pages: Record<string, NormalizedPage>, config: SeoConfig): Promise<Finding[]> {
+  async run(
+    pages: Record<string, NormalizedPage>,
+    config: SeoConfig,
+    backlinkData?: RuleEvaluationContext['backlinkData'],
+    backlinkError?: string
+  ): Promise<Finding[]> {
     const activeRules = this.getRules(config);
     const allFindings: Finding[] = [];
 
     const context: RuleEvaluationContext = {
       allPages: pages,
       config,
+      backlinkData,
+      backlinkError,
     };
 
     // Run rules on all pages

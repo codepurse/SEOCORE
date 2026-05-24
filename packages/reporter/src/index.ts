@@ -37,6 +37,30 @@ export class JsonReporter {
   }
 }
 
+function calculateLcpScore(lcpMs: number): number {
+  if (lcpMs <= 2500) return 100;
+  if (lcpMs <= 4000) return Math.round(100 - ((lcpMs - 2500) / 1500) * 50);
+  return Math.max(0, Math.round(50 - ((lcpMs - 4000) / 6000) * 50));
+}
+
+function calculateClsScore(cls: number): number {
+  if (cls <= 0.1) return 100;
+  if (cls <= 0.25) return Math.round(100 - ((cls - 0.1) / 0.15) * 50);
+  return Math.max(0, Math.round(50 - ((cls - 0.25) / 0.75) * 50));
+}
+
+function calculateInpScore(inpMs: number): number {
+  if (inpMs <= 200) return 100;
+  if (inpMs <= 500) return Math.round(100 - ((inpMs - 200) / 300) * 50);
+  return Math.max(0, Math.round(50 - ((inpMs - 500) / 1500) * 50));
+}
+
+function getScoreColor(score: number): any {
+  if (score >= 90) return pc.green;
+  if (score >= 50) return pc.yellow;
+  return pc.red;
+}
+
 export class TerminalReporter {
   static report(result: AuditResult, options: { verbose?: boolean; minSeverity?: Severity } = {}): void {
     const { verbose = false, minSeverity = 'warning' } = options;
@@ -70,6 +94,7 @@ export class TerminalReporter {
       accessibility: [],
       performance: [],
       mobile_seo: [],
+      backlink_intelligence: [],
     };
     for (const f of activeFindings) {
       if (findingsByCategory[f.category]) {
@@ -90,6 +115,7 @@ export class TerminalReporter {
       accessibility: pc.bgYellow,
       performance: pc.bgRed,
       mobile_seo: pc.bgBlue,
+      backlink_intelligence: pc.bgGreen,
     };
 
     const sevColors: Record<Severity, any> = {
@@ -248,13 +274,13 @@ export class TerminalReporter {
 
     // 6. Category Performance Table
     console.log(pc.bold('CATEGORY PERFORMANCE:'));
-    console.log(pc.gray('┌─────────────────┬─────────┬────────────┬────────────┬────────────┐'));
-    console.log(pc.gray('│') + ' Category        ' + pc.gray('│') + ' Score   ' + pc.gray('│') + ' Critical   ' + pc.gray('│') + ' Errors     ' + pc.gray('│') + ' Warnings   ' + pc.gray('│'));
-    console.log(pc.gray('├─────────────────┼─────────┼────────────┼────────────┼────────────┤'));
+    console.log(pc.gray('┌───────────────────────┬─────────┬────────────┬────────────┬────────────┐'));
+    console.log(pc.gray('│') + ' Category              ' + pc.gray('│') + ' Score   ' + pc.gray('│') + ' Critical   ' + pc.gray('│') + ' Errors     ' + pc.gray('│') + ' Warnings   ' + pc.gray('│'));
+    console.log(pc.gray('├───────────────────────┼─────────┼────────────┼────────────┼────────────┤'));
 
     for (const [catName, cat] of Object.entries(result.categories)) {
       const formattedCat = catName.charAt(0).toUpperCase() + catName.slice(1);
-      const paddedCat = formattedCat.padEnd(15);
+      const paddedCat = formattedCat.padEnd(21);
       const catScore = cat.score;
       let catColor = pc.green;
       if (catScore < 50) catColor = pc.red;
@@ -278,7 +304,7 @@ export class TerminalReporter {
         pc.gray('│')
       );
     }
-    console.log(pc.gray('└─────────────────┴─────────┴────────────┴────────────┴────────────┘\n'));
+    console.log(pc.gray('└───────────────────────┴─────────┴────────────┴────────────┴────────────┘\n'));
 
     // 7. Overall SEO Score Meter (At absolute bottom)
     const score = result.score;
@@ -318,13 +344,19 @@ export class TerminalReporter {
     if (mobileScore < 50) mobileColor = pc.red;
     else if (mobileScore < 90) mobileColor = pc.yellow;
 
+    const backlinkScore = result.categories.backlink_intelligence?.score ?? 100;
+    let backlinkColor = pc.green;
+    if (backlinkScore < 50) backlinkColor = pc.red;
+    else if (backlinkScore < 90) backlinkColor = pc.yellow;
+
     console.log(pc.bold('PRIMARY AUDIT SCORES:'));
     console.log(`  Overall SEO Score:   [ ${scoreColor(String(score).padStart(3))} / 100 ]`);
     console.log(`  Mobile SEO Score:    [ ${mobileColor(String(mobileScore).padStart(3))} / 100 ]`);
     console.log(`  Performance Score:   [ ${perfColor(String(perfScore).padStart(3))} / 100 ]`);
     console.log(`  Indexing Score:      [ ${idxColor(String(indexingScore).padStart(3))} / 100 ]`);
     console.log(`  Accessibility Score: [ ${accColor(String(accessScore).padStart(3))} / 100 ]`);
-    console.log(`  AI Visibility Score: [ ${aiColor(String(aiScore).padStart(3))} / 100 ]\n`);
+    console.log(`  AI Visibility Score: [ ${aiColor(String(aiScore).padStart(3))} / 100 ]`);
+    console.log(`  Backlink Score:      [ ${backlinkColor(String(backlinkScore).padStart(3))} / 100 ]\n`);
 
     // Calculate AI sub-score breakdown
     const aiFindings = result.findings.filter(f => f.category === 'ai_visibility');
@@ -458,6 +490,86 @@ export class TerminalReporter {
     printMobileBreakdownRow('Mobile Performance (35%):', performanceScore, 'mobile-performance');
     printMobileBreakdownRow('Responsive Design (20%):', responsiveScore, 'mobile-responsive');
     printMobileBreakdownRow('Indexing Readiness (10%):', mobileIndexingScore, 'mobile-indexing');
+    console.log();
+
+    // Calculate Core Web Vitals breakdown (LOAD TIME, INTERACTIVITY, VISUAL STABILITY)
+    const pagesWithVitals = Object.values(result.pages).filter(p => p.coreWebVitals);
+    let totalLcp = 0;
+    let totalCls = 0;
+    let totalInp = 0;
+    let vitalsCount = 0;
+    
+    if (pagesWithVitals.length > 0) {
+      for (const page of pagesWithVitals) {
+        if (page.coreWebVitals) {
+          totalLcp += page.coreWebVitals.lcp;
+          totalCls += page.coreWebVitals.cls;
+          totalInp += page.coreWebVitals.inp;
+          vitalsCount++;
+        }
+      }
+      
+      const avgLcp = totalLcp / vitalsCount;
+      const avgCls = totalCls / vitalsCount;
+      const avgInp = totalInp / vitalsCount;
+      
+      const lcpScore = calculateLcpScore(avgLcp);
+      const clsScore = calculateClsScore(avgCls);
+      const inpScore = calculateInpScore(avgInp);
+      
+      console.log(pc.bold(pc.cyan('⚡ CORE WEB VITALS SCORE BREAKDOWN:')));
+      console.log(`  • LOAD TIME               ${getScoreColor(lcpScore)(String(lcpScore).padStart(3))} / 100   (${(avgLcp / 1000).toFixed(1)}s)`);
+      console.log(`    ${pc.gray("The time it takes for the page’s main content to load")}\n`);
+      console.log(`  • INTERACTIVITY           ${getScoreColor(inpScore)(String(inpScore).padStart(3))} / 100   (${avgInp.toFixed(0)}ms)`);
+      console.log(`    ${pc.gray("The total time that a page is blocked from responding to user input, such as mouse clicks, or screen taps.")}\n`);
+      console.log(`  • VISUAL STABILITY        ${getScoreColor(clsScore)(String(clsScore).padStart(3))} / 100   (${avgCls.toFixed(3)})`);
+      console.log(`    ${pc.gray("How much your page layout shifts or jumps while it’s loading.")}\n`);
+    } else {
+      console.log(pc.bold(pc.cyan('⚡ CORE WEB VITALS SCORE BREAKDOWN:')));
+      console.log(`  • LOAD TIME               ${pc.yellow('N/A')} (unverifiable from static crawl)`);
+      console.log(`    ${pc.gray("The time it takes for the page’s main content to load")}\n`);
+      console.log(`  • INTERACTIVITY           ${pc.yellow('N/A')} (unverifiable from static crawl)`);
+      console.log(`    ${pc.gray("The total time that a page is blocked from responding to user input, such as mouse clicks, or screen taps.")}\n`);
+      console.log(`  • VISUAL STABILITY        ${pc.yellow('N/A')} (unverifiable from static crawl)`);
+      console.log(`    ${pc.gray("How much your page layout shifts or jumps while it’s loading.")}\n`);
+    }
+
+    // Calculate Backlink Intelligence sub-score breakdown
+    const backlinkFindings = result.findings.filter(f => f.category === 'backlink_intelligence');
+
+    let authorityScore = 100;
+    let linkQualityScore = 100;
+    let anchorTextHealthScore = 100;
+    let linkVelocityScore = 100;
+
+    for (const f of backlinkFindings) {
+      if (f.ruleId === 'missing-backlink-data') authorityScore -= 20 / pagesCount;
+      if (f.ruleId === 'anchor-text-over-optimization') anchorTextHealthScore -= 50 / pagesCount;
+      if (f.ruleId === 'low-authority-backlinks') linkQualityScore -= 40 / pagesCount;
+    }
+
+    authorityScore = Math.max(0, Math.min(100, Math.round(authorityScore)));
+    linkQualityScore = Math.max(0, Math.min(100, Math.round(linkQualityScore)));
+    anchorTextHealthScore = Math.max(0, Math.min(100, Math.round(anchorTextHealthScore)));
+    linkVelocityScore = Math.max(0, Math.min(100, Math.round(linkVelocityScore)));
+
+    const printBacklinkBreakdownRow = (label: string, subScore: number, ruleId: string) => {
+      console.log(`  • ${label.padEnd(26)} ${pc.bold(subScore)} / 100`);
+      if (subScore < 100) {
+        const ruleFindings = backlinkFindings.filter(f => f.ruleId === ruleId);
+        const uniqueMessages = Array.from(new Set(ruleFindings.map(f => f.message)));
+        for (const msg of uniqueMessages) {
+          const arrowColor = subScore < 50 ? pc.red : pc.yellow;
+          console.log(`    ${arrowColor('→')} ${pc.gray(msg)}`);
+        }
+      }
+    };
+
+    console.log(pc.bold(pc.cyan('🔗 BACKLINK INTELLIGENCE SCORE BREAKDOWN:')));
+    printBacklinkBreakdownRow('Authority Score:', authorityScore, 'missing-backlink-data');
+    printBacklinkBreakdownRow('Link Quality Score:', linkQualityScore, 'low-authority-backlinks');
+    printBacklinkBreakdownRow('Anchor Text Health:', anchorTextHealthScore, 'anchor-text-over-optimization');
+    printBacklinkBreakdownRow('Link Velocity:', linkVelocityScore, '');
     console.log();
 
     const filledBlocks = Math.round(score / 5);

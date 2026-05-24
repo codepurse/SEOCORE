@@ -9,6 +9,7 @@ const CATEGORY_WEIGHTS: Record<Category, number> = {
   accessibility: 0.10,
   performance: 0.10,
   mobile_seo: 0.15,
+  backlink_intelligence: 0.10,
 };
 
 const SEVERITY_MULTIPLIERS: Record<Severity, number> = {
@@ -25,7 +26,19 @@ export class ScoringEngine {
     config: SeoConfig,
     ruleDefinitions: RuleDefinition[]
   ): { score: number; categories: Record<Category, CategoryScore> } {
-    // 1. Initialize category scores
+    // 1. Initialize category scores and set floor scores per category
+    const categoryFloorScores: Record<Category, number> = {
+      indexing: 20,
+      metadata: 20,
+      links: 20,
+      seo: 20,
+      ai_visibility: 20,
+      accessibility: 20,
+      performance: 20,
+      mobile_seo: 20,
+      backlink_intelligence: 20,
+    };
+
     const categories: Record<Category, CategoryScore> = {
       indexing: this.initCategoryScore('indexing'),
       metadata: this.initCategoryScore('metadata'),
@@ -35,6 +48,7 @@ export class ScoringEngine {
       accessibility: this.initCategoryScore('accessibility'),
       performance: this.initCategoryScore('performance'),
       mobile_seo: this.initCategoryScore('mobile_seo'),
+      backlink_intelligence: this.initCategoryScore('backlink_intelligence'),
     };
 
     // 2. Count findings by severity per category
@@ -64,6 +78,7 @@ export class ScoringEngine {
       accessibility: 0,
       performance: 0,
       mobile_seo: 0,
+      backlink_intelligence: 0,
     };
 
     for (const finding of findings) {
@@ -73,18 +88,19 @@ export class ScoringEngine {
 
       // Deduction factor is amplified if we have very few pages to make single-page audits meaningful,
       // or normalized across page volume to avoid massive sites bottoming out at 0 immediately.
-      // We scale the deduction by page volume: deduction = (weight * multiplier) / Math.sqrt(pagesAudited)
+      // We scale the deduction by page volume: deduction = (weight * multiplier) / Math.log10(pagesAudited + 9)
       const rawDeduction = ruleWeight * multiplier;
       const normalizedDeduction = pagesAudited > 1 ? rawDeduction / Math.log10(pagesAudited + 9) : rawDeduction;
 
       categoryDeductions[finding.category] += normalizedDeduction;
     }
 
-    // 5. Finalize category scores
+    // 5. Finalize category scores with floor limits
     for (const cat of Object.keys(categories) as Category[]) {
       const rawScore = 100 - categoryDeductions[cat];
       categories[cat].totalDeductions = Math.round(categoryDeductions[cat] * 10) / 10;
-      categories[cat].score = Math.max(0, Math.min(100, Math.round(rawScore)));
+      // Apply floor score to prevent categories from hitting 0 too easily
+      categories[cat].score = Math.max(categoryFloorScores[cat], Math.min(100, Math.round(rawScore)));
     }
 
     // Special handling for Mobile SEO Category to ensure precise deterministic weighting of sub-metrics:

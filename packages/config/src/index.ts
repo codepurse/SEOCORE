@@ -1,9 +1,35 @@
 import { z } from 'zod';
-import { SeoConfig, AuditPreset, Severity } from '@seocore/sdk';
+import { SeoConfig, AuditPreset, Severity, BacklinkApiConfig } from '@seocore/sdk';
 import * as fs from 'fs';
 import * as path from 'path';
 
 // Define the schema using Zod
+const BingBacklinkSourceConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  apiKey: z.string().optional(),
+  siteUrl: z.string().optional(),
+  maxPages: z.number().int().positive().default(3),
+}).optional();
+
+const GscBacklinkSourceConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  exportPath: z.string().optional(),
+  maxRows: z.number().int().positive().default(5000),
+}).optional();
+
+const LogBacklinkSourceConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  paths: z.array(z.string()).default([]),
+  maxRows: z.number().int().positive().default(5000),
+}).optional();
+
+const BacklinkApiConfigSchema = z.object({
+  provider: z.enum(['bing', 'custom']),
+  bing: BingBacklinkSourceConfigSchema,
+  gsc: GscBacklinkSourceConfigSchema,
+  logs: LogBacklinkSourceConfigSchema,
+}).optional();
+
 export const SeoConfigSchema = z.object({
   preset: z.enum(['quick', 'standard', 'deep', 'enterprise']).default('standard'),
   concurrency: z.number().int().positive().default(3),
@@ -12,6 +38,8 @@ export const SeoConfigSchema = z.object({
   rateLimitMs: z.number().int().nonnegative().default(100),
   retryCount: z.number().int().nonnegative().default(2),
   playwrightEnabled: z.boolean().default(false),
+  lighthouseEnabled: z.boolean().default(true),
+  lighthouseSampleCount: z.number().int().positive().optional(),
   excludePatterns: z.array(z.string()).default([]),
   includePatterns: z.array(z.string()).default([]),
   ruleOverrides: z.record(
@@ -23,6 +51,7 @@ export const SeoConfigSchema = z.object({
     })
   ).default({}),
   customRulesPath: z.string().optional(),
+  backlinks: BacklinkApiConfigSchema,
 });
 
 export const DEFAULT_CONFIG: SeoConfig = {
@@ -33,6 +62,7 @@ export const DEFAULT_CONFIG: SeoConfig = {
   rateLimitMs: 100,
   retryCount: 2,
   playwrightEnabled: false,
+  lighthouseEnabled: true,
   excludePatterns: [],
   includePatterns: [],
   ruleOverrides: {},
@@ -102,6 +132,19 @@ export function resolveConfig(partial: Partial<SeoConfig> = {}, configFile?: str
     ...partial,
   };
 
+  const ensureBacklinksConfig = (): BacklinkApiConfig => {
+    if (!merged.backlinks) {
+      merged.backlinks = { provider: 'custom' } as BacklinkApiConfig;
+    } else if (!merged.backlinks.provider) {
+      merged.backlinks = {
+        ...merged.backlinks,
+        provider: 'custom',
+      } as BacklinkApiConfig;
+    }
+
+    return merged.backlinks as BacklinkApiConfig;
+  };
+
   // 4. Apply environment overrides (prefix SEO_CORE_)
   if (process.env.SEO_CORE_CONCURRENCY) {
     merged.concurrency = parseInt(process.env.SEO_CORE_CONCURRENCY, 10);
@@ -114,6 +157,48 @@ export function resolveConfig(partial: Partial<SeoConfig> = {}, configFile?: str
   }
   if (process.env.SEO_CORE_PLAYWRIGHT) {
     merged.playwrightEnabled = process.env.SEO_CORE_PLAYWRIGHT === 'true';
+  }
+  if (process.env.SEO_CORE_BACKLINKS_PROVIDER) {
+    const backlinks = ensureBacklinksConfig();
+    backlinks.provider = process.env.SEO_CORE_BACKLINKS_PROVIDER as any;
+  }
+  if (process.env.SEO_CORE_BACKLINKS_API_KEY) {
+    const backlinks = ensureBacklinksConfig();
+    backlinks.bing = backlinks.bing || {};
+    backlinks.bing.apiKey = process.env.SEO_CORE_BACKLINKS_API_KEY;
+  }
+  if (process.env.SEO_CORE_BACKLINKS_BING_SITE_URL) {
+    const backlinks = ensureBacklinksConfig();
+    backlinks.bing = backlinks.bing || {};
+    backlinks.bing.siteUrl = process.env.SEO_CORE_BACKLINKS_BING_SITE_URL;
+  }
+  if (process.env.SEO_CORE_BACKLINKS_BING_MAX_PAGES) {
+    const backlinks = ensureBacklinksConfig();
+    backlinks.bing = backlinks.bing || {};
+    backlinks.bing.maxPages = parseInt(process.env.SEO_CORE_BACKLINKS_BING_MAX_PAGES, 10);
+  }
+  if (process.env.SEO_CORE_BACKLINKS_GSC_EXPORT_PATH) {
+    const backlinks = ensureBacklinksConfig();
+    backlinks.gsc = backlinks.gsc || {};
+    backlinks.gsc.exportPath = process.env.SEO_CORE_BACKLINKS_GSC_EXPORT_PATH;
+  }
+  if (process.env.SEO_CORE_BACKLINKS_GSC_MAX_ROWS) {
+    const backlinks = ensureBacklinksConfig();
+    backlinks.gsc = backlinks.gsc || {};
+    backlinks.gsc.maxRows = parseInt(process.env.SEO_CORE_BACKLINKS_GSC_MAX_ROWS, 10);
+  }
+  if (process.env.SEO_CORE_BACKLINKS_LOG_PATHS) {
+    const backlinks = ensureBacklinksConfig();
+    backlinks.logs = backlinks.logs || {};
+    backlinks.logs.paths = process.env.SEO_CORE_BACKLINKS_LOG_PATHS
+      .split(',')
+      .map(entry => entry.trim())
+      .filter(Boolean);
+  }
+  if (process.env.SEO_CORE_BACKLINKS_LOG_MAX_ROWS) {
+    const backlinks = ensureBacklinksConfig();
+    backlinks.logs = backlinks.logs || {};
+    backlinks.logs.maxRows = parseInt(process.env.SEO_CORE_BACKLINKS_LOG_MAX_ROWS, 10);
   }
 
   // 5. Validate with Zod

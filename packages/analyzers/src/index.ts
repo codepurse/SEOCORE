@@ -19,6 +19,11 @@ export class PageNormalizer {
       redirectChain,
     };
 
+    if (result.lighthouse) {
+      normalized.coreWebVitals = result.lighthouse.coreWebVitals;
+      normalized.performanceScore = Math.round(result.lighthouse.score * 100);
+    }
+
     if (!html || !contentType.includes('text/html')) {
       return normalized;
     }
@@ -150,6 +155,34 @@ export class PageNormalizer {
         }
       });
 
+      // 10. OpenGraph
+      const openGraph: Record<string, string> = {};
+      $('meta[property^="og:"]').each((_, el) => {
+        const property = $(el).attr('property');
+        const content = $(el).attr('content');
+        if (property && content) {
+          const key = property.replace('og:', '');
+          openGraph[key] = content.trim();
+        }
+      });
+      if (Object.keys(openGraph).length > 0) {
+        normalized.openGraph = openGraph;
+      }
+
+      // 11. Twitter Card
+      const twitterCard: Record<string, string> = {};
+      $('meta[name^="twitter:"]').each((_, el) => {
+        const name = $(el).attr('name');
+        const content = $(el).attr('content');
+        if (name && content) {
+          const key = name.replace('twitter:', '');
+          twitterCard[key] = content.trim();
+        }
+      });
+      if (Object.keys(twitterCard).length > 0) {
+        normalized.twitterCard = twitterCard;
+      }
+
       // 10. Performance & Resources Extraction
       let scriptCount = 0;
       let stylesheetCount = 0;
@@ -187,27 +220,33 @@ export class PageNormalizer {
 
       normalized.resources = resources;
 
-      // Simulated/Extracted Core Web Vitals
-      const lcp = Math.round(loadTimeMs * (1.1 + (resources.jsRequests * 0.1) + (resources.imageRequests * 0.02)));
-      const cls = Math.round(Math.min(0.5, unDimensionedImages * 0.03) * 100) / 100;
-      const inp = Math.round(80 + (resources.jsRequests * 15) + Math.min(300, resources.jsSizeBytes / 5000));
+      // Use real Lighthouse data if available, otherwise simulate
+      if (result.lighthouse) {
+        normalized.coreWebVitals = result.lighthouse.coreWebVitals;
+        normalized.performanceScore = Math.round(result.lighthouse.score * 100);
+      } else {
+        // Simulated/Extracted Core Web Vitals
+        const lcp = Math.round(loadTimeMs * (1.1 + (resources.jsRequests * 0.1) + (resources.imageRequests * 0.02)));
+        const cls = Math.round(Math.min(0.5, unDimensionedImages * 0.03) * 100) / 100;
+        const inp = Math.round(80 + (resources.jsRequests * 15) + Math.min(300, resources.jsSizeBytes / 5000));
 
-      normalized.coreWebVitals = { lcp, cls, inp };
+        normalized.coreWebVitals = { lcp, cls, inp };
 
-      // Performance Score (0-100)
-      let lcpScore = 100;
-      if (lcp > 2500) lcpScore = Math.max(0, 100 - ((lcp - 2500) / 15));
-      if (lcp > 4000) lcpScore = Math.max(0, 50 - ((lcp - 4000) / 50));
+        // Performance Score (0-100)
+        let lcpScore = 100;
+        if (lcp > 2500) lcpScore = Math.max(0, 100 - ((lcp - 2500) / 15));
+        if (lcp > 4000) lcpScore = Math.max(0, 50 - ((lcp - 4000) / 50));
 
-      let clsScore = 100;
-      if (cls > 0.1) clsScore = Math.max(0, 100 - ((cls - 0.1) * 333));
+        let clsScore = 100;
+        if (cls > 0.1) clsScore = Math.max(0, 100 - ((cls - 0.1) * 333));
 
-      let inpScore = 100;
-      if (inp > 200) inpScore = Math.max(0, 100 - ((inp - 200) / 3));
+        let inpScore = 100;
+        if (inp > 200) inpScore = Math.max(0, 100 - ((inp - 200) / 3));
 
-      normalized.performanceScore = Math.max(0, Math.min(100, Math.round(
-        (lcpScore * 0.4) + (clsScore * 0.3) + (inpScore * 0.3)
-      )));
+        normalized.performanceScore = Math.max(0, Math.min(100, Math.round(
+          (lcpScore * 0.4) + (clsScore * 0.3) + (inpScore * 0.3)
+        )));
+      }
 
     } catch (err: any) {
       console.error(`[Normalizer] Error normalizing page HTML for ${url}:`, err.message);

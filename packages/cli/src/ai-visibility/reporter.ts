@@ -85,25 +85,111 @@ export function getDescription(dimension: string, score: number): string {
   }
 }
 
+import * as fs from 'fs';
+import * as path from 'path';
+import { AiVisibilityOptions } from './index.js';
+
 export function report(
   url: string,
   score: number,
   grade: string,
   results: CheckResult[],
-  jsonFlag: boolean
+  jsonFlag: boolean,
+  options?: AiVisibilityOptions
 ): void {
-  if (jsonFlag) {
-    const jsonOutput = {
-      url,
-      score,
-      grade,
-      checkedAt: new Date().toISOString(),
-      breakdown: results.map(r => ({
-        ...r,
-        description: getDescription(r.dimension, r.score),
-      })),
-    };
-    console.log(JSON.stringify(jsonOutput, null, 2));
+  const jsonOutput = {
+    url,
+    score,
+    grade,
+    checkedAt: new Date().toISOString(),
+    breakdown: results.map(r => ({
+      ...r,
+      description: getDescription(r.dimension, r.score),
+    })),
+  };
+
+  // Handle output file
+  const outputPath = options?.output;
+  
+  if (jsonFlag || options?.format === 'json') {
+    if (outputPath) {
+      fs.writeFileSync(outputPath, JSON.stringify(jsonOutput, null, 2), 'utf8');
+      console.log(chalk.green(`✓ JSON report saved to ${path.resolve(outputPath)}`));
+    } else {
+      console.log(JSON.stringify(jsonOutput, null, 2));
+    }
+    return;
+  }
+
+  if (options?.format === 'html') {
+    // Simple HTML report
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Visibility Report - ${url}</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
+        h1 { color: #2563eb; }
+        .score-box { padding: 1.5rem; border-radius: 8px; margin: 1rem 0; text-align: center; }
+        .score-high { background-color: #d1fae5; }
+        .score-mid { background-color: #fef3c7; }
+        .score-low { background-color: #fee2e2; }
+        table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; }
+        th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #e5e7eb; }
+        th { background-color: #f3f4f6; }
+        .issue { color: #dc2626; }
+        .win { color: #16a34a; }
+    </style>
+</head>
+<body>
+    <h1>AI Visibility Report</h1>
+    <p><strong>Target URL:</strong> <a href="${url}">${url}</a></p>
+    <div class="score-box ${score >= 75 ? 'score-high' : score >= 40 ? 'score-mid' : 'score-low'}">
+        <h2>Final Score: ${score}/100 (Grade: ${grade})</h2>
+    </div>
+
+    <h2>Breakdown</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Dimension</th>
+                <th>Score</th>
+                <th>Weight</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${results.map(r => `
+            <tr>
+                <td>${r.dimension}</td>
+                <td>${r.score}/${r.maxScore}</td>
+                <td>${r.weight}%</td>
+                <td>${r.score === 100 ? 'EXCELLENT' : r.score >= 75 ? 'GOOD' : r.score >= 40 ? 'NEEDS WORK' : 'CRITICAL'}</td>
+            </tr>
+            <tr>
+                <td colspan="4" style="padding-left: 1.5rem;">
+                    ${getDescription(r.dimension, r.score)}
+                    ${r.issues.length > 0 ? `<div class="issue"><strong>Issues:</strong><ul>${r.issues.map(i => `<li>${i}</li>`).join('')}</ul></div>` : ''}
+                    ${r.wins.length > 0 ? `<div class="win"><strong>Wins:</strong><ul>${r.wins.map(w => `<li>${w}</li>`).join('')}</ul></div>` : ''}
+                </td>
+            </tr>`).join('')}
+        </tbody>
+    </table>
+
+    <p><em>Generated at: ${new Date().toLocaleString()}</em></p>
+</body>
+</html>`;
+
+    if (outputPath) {
+      fs.writeFileSync(outputPath, htmlContent, 'utf8');
+      console.log(chalk.green(`✓ HTML report saved to ${path.resolve(outputPath)}`));
+    } else {
+      console.log(chalk.yellow('Warning: No output path specified for HTML format. Printing HTML to stdout.'));
+      console.log(htmlContent);
+    }
     return;
   }
 

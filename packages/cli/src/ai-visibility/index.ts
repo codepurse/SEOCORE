@@ -8,26 +8,43 @@ import { check as checkTopical } from './checkers/topical.js';
 import { score as calculateScore } from './scorer.js';
 import { report as generateReport } from './reporter.js';
 import { CheckResult } from './types.js';
+import { Spinner } from '../utils/spinner.js';
 
 export interface AiVisibilityOptions {
   json?: boolean;
   silent?: boolean;
+  verbose?: boolean;
+  format?: 'terminal' | 'json' | 'html';
+  output?: string;
 }
 
 export interface AiVisibilityResult {
   score: number;
   grade: string;
   breakdown: CheckResult[];
+  url: string;
+  checkedAt: string;
 }
 
 export async function runAiVisibility(
   url: string,
   options: AiVisibilityOptions = {}
 ): Promise<AiVisibilityResult> {
-  const jsonFlag = !!options.json;
+  const jsonFlag = !!options.json || options.format === 'json';
+  const silent = !!options.silent;
+
+  let spinner: Spinner | null = null;
+  if (!jsonFlag && !silent) {
+    spinner = new Spinner(`Analyzing AI visibility for ${url}...`);
+    spinner.start();
+  }
 
   // 1. Fetch site html, robots, sitemap, llms.txt
   const site = await fetchSite(url);
+
+  if (spinner) {
+    spinner.stop('AI visibility analysis complete.');
+  }
 
   // 2. Execute all checkers
   const breakdown: CheckResult[] = [
@@ -43,13 +60,17 @@ export async function runAiVisibility(
   const scoreResult = calculateScore(breakdown);
 
   // 4. Generate report
-  if (!options.silent) {
-    generateReport(url, scoreResult.score, scoreResult.grade, breakdown, jsonFlag);
-  }
-
-  return {
+  const result = {
     score: scoreResult.score,
     grade: scoreResult.grade,
     breakdown,
+    url,
+    checkedAt: new Date().toISOString(),
   };
+
+  if (!options.silent) {
+    generateReport(url, scoreResult.score, scoreResult.grade, breakdown, jsonFlag, options);
+  }
+
+  return result;
 }

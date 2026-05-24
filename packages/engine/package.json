@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@seocore/sdk": "*",
+    "@seocore/backlinks": "*",
     "@seocore/config": "*",
     "@seocore/crawler": "*",
     "@seocore/analyzers": "*",

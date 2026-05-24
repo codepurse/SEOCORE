@@ -64,10 +64,29 @@ export interface NormalizedPage {
     imageRequests: number;
     totalRequests: number;
   };
+  // OpenGraph and Twitter Card
+  openGraph?: {
+    title?: string;
+    description?: string;
+    image?: string;
+    url?: string;
+    type?: string;
+    siteName?: string;
+    [key: string]: string | undefined;
+  };
+  twitterCard?: {
+    card?: string;
+    title?: string;
+    description?: string;
+    image?: string;
+    site?: string;
+    creator?: string;
+    [key: string]: string | undefined;
+  };
 }
 
 export type Severity = 'critical' | 'error' | 'warning' | 'info';
-export type Category = 'seo' | 'performance' | 'accessibility' | 'indexing' | 'links' | 'metadata' | 'ai_visibility' | 'mobile_seo';
+export type Category = 'seo' | 'performance' | 'accessibility' | 'indexing' | 'links' | 'metadata' | 'ai_visibility' | 'mobile_seo' | 'backlink_intelligence';
 
 export interface Finding {
   id: string; // ruleId:url-hash
@@ -87,6 +106,60 @@ export interface Finding {
 
 export type AuditPreset = 'quick' | 'standard' | 'deep' | 'enterprise';
 
+export interface Backlink {
+  sourceUrl: string;
+  targetUrl: string;
+  anchorText: string;
+  isDofollow?: boolean;
+  domainAuthority?: number;
+  pageAuthority?: number;
+  spamScore?: number;
+  firstSeen?: Date;
+  lastSeen?: Date;
+}
+
+export interface BingBacklinkSourceConfig {
+  enabled?: boolean;
+  apiKey?: string;
+  siteUrl?: string;
+  maxPages?: number;
+}
+
+export interface GscBacklinkSourceConfig {
+  enabled?: boolean;
+  exportPath?: string;
+  maxRows?: number;
+}
+
+export interface LogBacklinkSourceConfig {
+  enabled?: boolean;
+  paths?: string[];
+  maxRows?: number;
+}
+
+export interface BacklinkApiConfig {
+  provider: 'bing' | 'custom';
+  bing?: BingBacklinkSourceConfig;
+  gsc?: GscBacklinkSourceConfig;
+  logs?: LogBacklinkSourceConfig;
+}
+
+export interface BacklinkDomainMetrics {
+  totalBacklinks?: number;
+  referringDomains?: number;
+  sourceCount?: number;
+  authorityMetricsAvailable?: boolean;
+  domainAuthority?: number;
+  spamScore?: number;
+  notes?: string[];
+}
+
+export interface BacklinkIntelligenceData {
+  backlinks: Backlink[];
+  domainMetrics: BacklinkDomainMetrics;
+  sources: string[];
+}
+
 export interface SeoConfig {
   preset: AuditPreset;
   concurrency: number;
@@ -95,10 +168,13 @@ export interface SeoConfig {
   rateLimitMs: number;
   retryCount: number;
   playwrightEnabled: boolean;
+  lighthouseEnabled: boolean;
+  lighthouseSampleCount?: number;
   excludePatterns: string[];
   includePatterns: string[];
   ruleOverrides: Record<string, { enabled?: boolean; severity?: Severity; weight?: number }>;
   customRulesPath?: string;
+  backlinks?: BacklinkApiConfig;
 }
 
 // ==========================================
@@ -148,6 +224,7 @@ export interface AuditResult {
   totalLoadTimeMs: number;
   pages: Record<string, NormalizedPage>;
   crawlGraph?: CrawlGraph;
+  backlinkData?: BacklinkIntelligenceData;
 }
 
 // ==========================================
@@ -172,6 +249,8 @@ export interface Rule {
 export interface RuleEvaluationContext {
   allPages: Record<string, NormalizedPage>;
   config: SeoConfig;
+  backlinkData?: BacklinkIntelligenceData;
+  backlinkError?: string;
 }
 
 // ==========================================
@@ -196,6 +275,14 @@ export interface CrawlResult {
     cssRequests: number;
     imageRequests: number;
     totalRequests: number;
+  };
+  lighthouse?: {
+    score: number;
+    coreWebVitals: {
+      lcp: number;
+      cls: number;
+      inp: number;
+    };
   };
 }
 

@@ -1,4 +1,167 @@
+import { createServer } from 'node:net';
 import { Crawler, CrawlResult, SeoConfig, RedirectHop } from '@seocore/sdk';
+
+async function getAvailablePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.unref();
+    server.on('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        server.close(() => reject(new Error('Failed to allocate browser debug port')));
+        return;
+      }
+
+      const { port } = address;
+      server.close((err) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(port);
+      });
+    });
+  });
+}
+
+// ==========================================
+// LIGHTHOUSE CRAWLER (PERFORMANCE AUDIT)
+// ==========================================
+
+export class LighthouseCrawler implements Crawler {
+  private readonly httpCrawler = new HttpCrawler();
+  private browser: any = null;
+  private port: number | null = null;
+  private lighthouseModule: any = null;
+  private playwrightModule: any = null;
+  private initialized = false;
+
+  private async initialize(): Promise<void> {
+    if (this.initialized) return;
+    
+    try {
+      // @ts-ignore
+      this.lighthouseModule = await import('lighthouse');
+      // @ts-ignore
+      this.playwrightModule = await import('playwright');
+      
+      this.port = await getAvailablePort();
+      this.browser = await this.playwrightModule.chromium.launch({
+        headless: true,
+        args: [
+          `--remote-debugging-port=${this.port}`,
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+        ],
+      });
+      
+      this.initialized = true;
+    } catch (err) {
+      console.warn(`[Crawler] Lighthouse or Playwright not installed. Falling back to HTTP Crawler.`);
+      throw err;
+    }
+  }
+
+  async crawl(url: string, config: SeoConfig): Promise<CrawlResult> {
+    const startTime = Date.now();
+    try {
+      await this.initialize();
+      
+      // Fetch page HTML first using HttpCrawler
+      const httpResult = await this.httpCrawler.crawl(url, config);
+
+      // Run Lighthouse with optimized options
+      const options = {
+        logLevel: 'silent' as const,
+        output: 'json' as const,
+        onlyCategories: ['performance'],
+        onlyAudits: [
+          'largest-contentful-paint',
+          'cumulative-layout-shift',
+          'interaction-to-next-paint',
+          'total-blocking-time',
+          'total-byte-weight',
+          'network-requests',
+        ],
+        port: this.port!,
+        throttlingMethod: 'provided',
+        throttling: {
+          rttMs: 40,
+          throughputKbps: 10 * 1024,
+          cpuSlowdownMultiplier: 1,
+          requestLatencyMs: 0,
+          downloadThroughputKbps: 0,
+          uploadThroughputKbps: 0,
+        },
+        screenEmulation: { disabled: true },
+        formFactor: 'desktop',
+      };
+      
+      const runnerResult = await this.lighthouseModule.default(url, options);
+      
+      // Extract performance metrics
+      const lhr = runnerResult?.lhr as any;
+      const coreWebVitals = {
+        lcp: lhr?.audits?.['largest-contentful-paint']?.numericValue || 0,
+        cls: lhr?.audits?.['cumulative-layout-shift']?.numericValue || 0,
+        inp: lhr?.audits?.['interaction-to-next-paint']?.numericValue || 
+             lhr?.audits?.['total-blocking-time']?.numericValue || 0,
+      };
+      
+      const performanceScore = lhr?.categories?.performance?.score || 0;
+      
+      // Extract resource sizes
+      const resources = {
+        pageSizeBytes: httpResult.html ? Buffer.byteLength(httpResult.html, 'utf8') : 0,
+        jsSizeBytes: lhr?.audits?.['total-byte-weight']?.details?.items?.find((item: any) => item.resourceType === 'Script')?.transferSize || 0,
+        cssSizeBytes: lhr?.audits?.['total-byte-weight']?.details?.items?.find((item: any) => item.resourceType === 'Stylesheet')?.transferSize || 0,
+        imageSizeBytes: lhr?.audits?.['total-byte-weight']?.details?.items?.find((item: any) => item.resourceType === 'Image')?.transferSize || 0,
+        otherSizeBytes: 0,
+        jsRequests: 0,
+        cssRequests: 0,
+        imageRequests: 0,
+        totalRequests: lhr?.audits?.['network-requests']?.details?.items?.length || 0,
+      };
+
+      return {
+        url,
+        html: httpResult.html,
+        statusCode: httpResult.statusCode,
+        loadTimeMs: httpResult.loadTimeMs,
+        contentType: httpResult.contentType,
+        redirectChain: httpResult.redirectChain,
+        resources,
+        lighthouse: {
+          score: performanceScore,
+          coreWebVitals,
+        },
+      };
+    } catch (err: any) {
+      // If Lighthouse fails, try to recover gracefully
+      if (!this.initialized) {
+        return this.httpCrawler.crawl(url, config);
+      }
+      return {
+        url,
+        statusCode: 0,
+        loadTimeMs: Date.now() - startTime,
+        contentType: 'none',
+        error: `Lighthouse error: ${err.message}`,
+      };
+    }
+  }
+
+  async close(): Promise<void> {
+    if (this.browser) {
+      await this.browser.close();
+      this.browser = null;
+      this.initialized = false;
+    }
+  }
+}
 
 // ==========================================
 // ROBOTS.TXT PARSER
