@@ -62,7 +62,7 @@ function getScoreColor(score: number): any {
 }
 
 export class TerminalReporter {
-  static report(result: AuditResult, options: { verbose?: boolean; minSeverity?: Severity } = {}): void {
+  static report(result: AuditResult, options: { verbose?: boolean; minSeverity?: Severity } = {}, aiVisBreakdown?: any): void {
     const { verbose = false, minSeverity = 'warning' } = options;
 
     const severityPriority: Record<Severity, number> = {
@@ -359,76 +359,100 @@ export class TerminalReporter {
     console.log(`  Backlink Score:      [ ${backlinkColor(String(backlinkScore).padStart(3))} / 100 ]\n`);
 
     // Calculate AI sub-score breakdown
-    const aiFindings = result.findings.filter(f => f.category === 'ai_visibility');
     const pagesCount = result.pagesAudited || 1;
-
-    let extractability = 100;
-    let entityClarity = 100;
-    let citationReadiness = 100;
-    let structuralOrg = 100;
-    let retrievalFriendliness = 100;
-    let authoritySignals = 100;
-
-    const hasDetail = (f: any, detail: string, msgSubstring: string) => {
-      let hash = 0;
-      for (let i = 0; i < detail.length; i++) {
-        hash = (hash << 5) - hash + detail.charCodeAt(i);
-        hash |= 0;
-      }
-      const suffix = `:${Math.abs(hash).toString(36)}`;
-      return f.id.endsWith(suffix) || f.message.toLowerCase().includes(msgSubstring.toLowerCase());
-    };
-
-    for (const f of aiFindings) {
-      if (f.ruleId === 'ai-extractability') {
-        if (hasDetail(f, 'no-semantic-containers', 'semantic content container')) extractability -= 25 / pagesCount;
-        if (hasDetail(f, 'high-boilerplate-ratio', 'boilerplate-to-content')) extractability -= 25 / pagesCount;
-        if (hasDetail(f, 'no-answer-first', 'answer-first')) extractability -= 10 / pagesCount;
-      } else if (f.ruleId === 'ai-entity-clarity') {
-        if (hasDetail(f, 'weak-entity', 'weakly defined')) entityClarity -= 55 / pagesCount;
-        if (hasDetail(f, 'missing-disambiguation', 'disambiguation')) entityClarity -= 30 / pagesCount;
-      } else if (f.ruleId === 'ai-citation-readiness') {
-        if (hasDetail(f, 'no-external-citations', 'external citations')) citationReadiness -= 40 / pagesCount;
-        if (hasDetail(f, 'missing-faq-schema', 'structured schema')) citationReadiness -= 30 / pagesCount;
-        if (hasDetail(f, 'no-statistics', 'statistics')) citationReadiness -= 20 / pagesCount;
-      } else if (f.ruleId === 'ai-structural-organization') {
-        if (hasDetail(f, 'broken-hierarchy', 'Heading hierarchy')) structuralOrg -= 45 / pagesCount;
-        if (hasDetail(f, 'no-lists-or-tables', 'list or table')) structuralOrg -= 20 / pagesCount;
-      } else if (f.ruleId === 'ai-retrieval-friendliness') {
-        if (hasDetail(f, 'paragraphs-too-long', 'Content sections are too long')) retrievalFriendliness -= 40 / pagesCount;
-        if (hasDetail(f, 'thin-content', 'too thin')) retrievalFriendliness -= 50 / pagesCount;
-      } else if (f.ruleId === 'ai-authority-signals') {
-        if (hasDetail(f, 'missing-authorship', 'author profiles')) authoritySignals -= 45 / pagesCount;
-        if (hasDetail(f, 'missing-trust-signals', 'trust signals')) authoritySignals -= 40 / pagesCount;
-      }
-    }
-
-    extractability = Math.max(0, Math.min(100, Math.round(extractability)));
-    entityClarity = Math.max(0, Math.min(100, Math.round(entityClarity)));
-    citationReadiness = Math.max(0, Math.min(100, Math.round(citationReadiness)));
-    structuralOrg = Math.max(0, Math.min(100, Math.round(structuralOrg)));
-    retrievalFriendliness = Math.max(0, Math.min(100, Math.round(retrievalFriendliness)));
-    authoritySignals = Math.max(0, Math.min(100, Math.round(authoritySignals)));
-
-    const printBreakdownRow = (label: string, subScore: number, ruleId: string) => {
-      console.log(`  • ${label.padEnd(26)} ${pc.bold(subScore)} / 100`);
-      if (subScore < 100) {
-        const ruleFindings = aiFindings.filter(f => f.ruleId === ruleId);
-        const uniqueMessages = Array.from(new Set(ruleFindings.map(f => f.message)));
-        for (const msg of uniqueMessages) {
-          const arrowColor = subScore < 50 ? pc.red : pc.yellow;
-          console.log(`    ${arrowColor('→')} ${pc.gray(msg)}`);
+    console.log(pc.bold(pc.cyan('🤖 AI VISIBILITY SCORE BREAKDOWN:')));
+    if (aiVisBreakdown && Array.isArray(aiVisBreakdown)) {
+      // Use the actual breakdown from runAiVisibility
+      for (const check of aiVisBreakdown) {
+        let scoreColor = pc.green;
+        if (check.score < 50) scoreColor = pc.red;
+        else if (check.score < 90) scoreColor = pc.yellow;
+        
+        console.log(`  • ${check.dimension.padEnd(26)} ${scoreColor(pc.bold(check.score))} / 100`);
+        
+        // Print issues and wins
+        if (check.issues && check.issues.length > 0) {
+          for (const issue of check.issues) {
+            console.log(`    ${pc.red('→')} ${pc.gray(issue)}`);
+          }
+        }
+        if (check.wins && check.wins.length > 0) {
+          for (const win of check.wins) {
+            console.log(`    ${pc.green('✓')} ${pc.gray(win)}`);
+          }
         }
       }
-    };
+    } else {
+      // Fallback to old calculation if no breakdown is available
+      const aiFindings = result.findings.filter(f => f.category === 'ai_visibility');
 
-    console.log(pc.bold(pc.cyan('🤖 AI VISIBILITY SCORE BREAKDOWN:')));
-    printBreakdownRow('Extractability:', extractability, 'ai-extractability');
-    printBreakdownRow('Entity Clarity:', entityClarity, 'ai-entity-clarity');
-    printBreakdownRow('Citation Readiness:', citationReadiness, 'ai-citation-readiness');
-    printBreakdownRow('Structural Organization:', structuralOrg, 'ai-structural-organization');
-    printBreakdownRow('Retrieval Friendliness:', retrievalFriendliness, 'ai-retrieval-friendliness');
-    printBreakdownRow('Authority Signals:', authoritySignals, 'ai-authority-signals');
+      let extractability = 100;
+      let entityClarity = 100;
+      let citationReadiness = 100;
+      let structuralOrg = 100;
+      let retrievalFriendliness = 100;
+      let authoritySignals = 100;
+
+      const hasDetail = (f: any, detail: string, msgSubstring: string) => {
+        let hash = 0;
+        for (let i = 0; i < detail.length; i++) {
+          hash = (hash << 5) - hash + detail.charCodeAt(i);
+          hash |= 0;
+        }
+        const suffix = `:${Math.abs(hash).toString(36)}`;
+        return f.id.endsWith(suffix) || f.message.toLowerCase().includes(msgSubstring.toLowerCase());
+      };
+
+      for (const f of aiFindings) {
+        if (f.ruleId === 'ai-extractability') {
+          if (hasDetail(f, 'no-semantic-containers', 'semantic content container')) extractability -= 25 / pagesCount;
+          if (hasDetail(f, 'high-boilerplate-ratio', 'boilerplate-to-content')) extractability -= 25 / pagesCount;
+          if (hasDetail(f, 'no-answer-first', 'answer-first')) extractability -= 10 / pagesCount;
+        } else if (f.ruleId === 'ai-entity-clarity') {
+          if (hasDetail(f, 'weak-entity', 'weakly defined')) entityClarity -= 55 / pagesCount;
+          if (hasDetail(f, 'missing-disambiguation', 'disambiguation')) entityClarity -= 30 / pagesCount;
+        } else if (f.ruleId === 'ai-citation-readiness') {
+          if (hasDetail(f, 'no-external-citations', 'external citations')) citationReadiness -= 40 / pagesCount;
+          if (hasDetail(f, 'missing-faq-schema', 'structured schema')) citationReadiness -= 30 / pagesCount;
+          if (hasDetail(f, 'no-statistics', 'statistics')) citationReadiness -= 20 / pagesCount;
+        } else if (f.ruleId === 'ai-structural-organization') {
+          if (hasDetail(f, 'broken-hierarchy', 'Heading hierarchy')) structuralOrg -= 45 / pagesCount;
+          if (hasDetail(f, 'no-lists-or-tables', 'list or table')) structuralOrg -= 20 / pagesCount;
+        } else if (f.ruleId === 'ai-retrieval-friendliness') {
+          if (hasDetail(f, 'paragraphs-too-long', 'Content sections are too long')) retrievalFriendliness -= 40 / pagesCount;
+          if (hasDetail(f, 'thin-content', 'too thin')) retrievalFriendliness -= 50 / pagesCount;
+        } else if (f.ruleId === 'ai-authority-signals') {
+          if (hasDetail(f, 'missing-authorship', 'author profiles')) authoritySignals -= 45 / pagesCount;
+          if (hasDetail(f, 'missing-trust-signals', 'trust signals')) authoritySignals -= 40 / pagesCount;
+        }
+      }
+
+      extractability = Math.max(0, Math.min(100, Math.round(extractability)));
+      entityClarity = Math.max(0, Math.min(100, Math.round(entityClarity)));
+      citationReadiness = Math.max(0, Math.min(100, Math.round(citationReadiness)));
+      structuralOrg = Math.max(0, Math.min(100, Math.round(structuralOrg)));
+      retrievalFriendliness = Math.max(0, Math.min(100, Math.round(retrievalFriendliness)));
+      authoritySignals = Math.max(0, Math.min(100, Math.round(authoritySignals)));
+
+      const printBreakdownRow = (label: string, subScore: number, ruleId: string) => {
+        console.log(`  • ${label.padEnd(26)} ${pc.bold(subScore)} / 100`);
+        if (subScore < 100) {
+          const ruleFindings = aiFindings.filter(f => f.ruleId === ruleId);
+          const uniqueMessages = Array.from(new Set(ruleFindings.map(f => f.message)));
+          for (const msg of uniqueMessages) {
+            const arrowColor = subScore < 50 ? pc.red : pc.yellow;
+            console.log(`    ${arrowColor('→')} ${pc.gray(msg)}`);
+          }
+        }
+      };
+
+      printBreakdownRow('Extractability:', extractability, 'ai-extractability');
+      printBreakdownRow('Entity Clarity:', entityClarity, 'ai-entity-clarity');
+      printBreakdownRow('Citation Readiness:', citationReadiness, 'ai-citation-readiness');
+      printBreakdownRow('Structural Organization:', structuralOrg, 'ai-structural-organization');
+      printBreakdownRow('Retrieval Friendliness:', retrievalFriendliness, 'ai-retrieval-friendliness');
+      printBreakdownRow('Authority Signals:', authoritySignals, 'ai-authority-signals');
+    }
     console.log();
 
     // Calculate Mobile SEO sub-score breakdown

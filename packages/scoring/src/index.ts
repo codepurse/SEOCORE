@@ -1,6 +1,6 @@
-import { Category, CategoryScore, Finding, SeoConfig, Severity, RuleDefinition } from '@seocore/sdk';
+import { Category, CategoryScore, Finding, SeoConfig, Severity, RuleDefinition, ExecutionTierConfig } from '@seocore/sdk';
 
-const CATEGORY_WEIGHTS: Record<Category, number> = {
+const DEFAULT_CATEGORY_WEIGHTS: Record<Category, number> = {
   indexing: 0.15,
   metadata: 0.15,
   links: 0.10,
@@ -10,6 +10,18 @@ const CATEGORY_WEIGHTS: Record<Category, number> = {
   performance: 0.10,
   mobile_seo: 0.15,
   backlink_intelligence: 0.10,
+};
+
+const DEFAULT_FLOOR_SCORES: Record<Category, number> = {
+  indexing: 20,
+  metadata: 20,
+  links: 20,
+  seo: 20,
+  ai_visibility: 20,
+  accessibility: 20,
+  performance: 20,
+  mobile_seo: 20,
+  backlink_intelligence: 20,
 };
 
 const SEVERITY_MULTIPLIERS: Record<Severity, number> = {
@@ -24,21 +36,14 @@ export class ScoringEngine {
     findings: Finding[],
     pagesAudited: number,
     config: SeoConfig,
-    ruleDefinitions: RuleDefinition[]
+    ruleDefinitions: RuleDefinition[],
+    tierConfig?: ExecutionTierConfig
   ): { score: number; categories: Record<Category, CategoryScore> } {
-    // 1. Initialize category scores and set floor scores per category
-    const categoryFloorScores: Record<Category, number> = {
-      indexing: 20,
-      metadata: 20,
-      links: 20,
-      seo: 20,
-      ai_visibility: 20,
-      accessibility: 20,
-      performance: 20,
-      mobile_seo: 20,
-      backlink_intelligence: 20,
-    };
+    // 1. Get scoring settings from tier config or use defaults
+    const categoryWeights = tierConfig?.scoring.categoryWeights ?? DEFAULT_CATEGORY_WEIGHTS;
+    const floorScores = tierConfig?.scoring.floorScores ?? DEFAULT_FLOOR_SCORES;
 
+    // 2. Initialize category scores
     const categories: Record<Category, CategoryScore> = {
       indexing: this.initCategoryScore('indexing'),
       metadata: this.initCategoryScore('metadata'),
@@ -51,7 +56,7 @@ export class ScoringEngine {
       backlink_intelligence: this.initCategoryScore('backlink_intelligence'),
     };
 
-    // 2. Count findings by severity per category
+    // 3. Count findings by severity per category
     for (const finding of findings) {
       const catScore = categories[finding.category];
       if (catScore) {
@@ -59,7 +64,7 @@ export class ScoringEngine {
       }
     }
 
-    // 3. Map rule definitions for fast weight lookup
+    // 4. Map rule definitions for fast weight lookup
     const ruleWeights = new Map<string, number>();
     const ruleSeverities = new Map<string, Severity>();
     for (const rDef of ruleDefinitions) {
@@ -68,7 +73,7 @@ export class ScoringEngine {
       ruleSeverities.set(rDef.id, override?.severity ?? rDef.defaultSeverity);
     }
 
-    // 4. Calculate deductions per category
+    // 5. Calculate deductions per category
     const categoryDeductions: Record<Category, number> = {
       indexing: 0,
       metadata: 0,
@@ -95,12 +100,12 @@ export class ScoringEngine {
       categoryDeductions[finding.category] += normalizedDeduction;
     }
 
-    // 5. Finalize category scores with floor limits
+    // 6. Finalize category scores with floor limits
     for (const cat of Object.keys(categories) as Category[]) {
       const rawScore = 100 - categoryDeductions[cat];
       categories[cat].totalDeductions = Math.round(categoryDeductions[cat] * 10) / 10;
-      // Apply floor score to prevent categories from hitting 0 too easily
-      categories[cat].score = Math.max(categoryFloorScores[cat], Math.min(100, Math.round(rawScore)));
+      // Apply floor score from tier config
+      categories[cat].score = Math.max(floorScores[cat] ?? 0, Math.min(100, Math.round(rawScore)));
     }
 
     // Special handling for Mobile SEO Category to ensure precise deterministic weighting of sub-metrics:
@@ -299,14 +304,16 @@ export class ScoringEngine {
       }
     }
 
-    // 6. Calculate total weighted SEO score
+    // 7. Calculate total weighted SEO score using tier config weights
     let weightedSum = 0;
     let weightTotal = 0;
 
     for (const cat of Object.keys(categories) as Category[]) {
-      const catWeight = CATEGORY_WEIGHTS[cat];
-      weightedSum += categories[cat].score * catWeight;
-      weightTotal += catWeight;
+      const catWeight = categoryWeights[cat];
+      if (catWeight !== undefined) {
+        weightedSum += categories[cat].score * catWeight;
+        weightTotal += catWeight;
+      }
     }
 
     const totalScore = weightTotal > 0 ? Math.round(weightedSum / weightTotal) : 100;

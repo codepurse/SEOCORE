@@ -1,4 +1,4 @@
-import { Rule, RuleDefinition, RuleEvaluationContext, Finding, NormalizedPage, SeoConfig } from '@seocore/sdk';
+import { Rule, RuleDefinition, RuleEvaluationContext, Finding, NormalizedPage, SeoConfig, ExecutionTierConfig, Category, Severity } from '@seocore/sdk';
 import * as cheerio from 'cheerio';
 
 // Helper to create a deterministic Finding ID
@@ -2672,11 +2672,25 @@ export class RuleEngine {
     this.customRules.push(rule);
   }
 
-  getRules(config: SeoConfig): Rule[] {
+  getRules(config: SeoConfig, tierConfig?: ExecutionTierConfig): Rule[] {
     const allRules = [...this.defaultRules, ...this.customRules];
     return allRules.filter(rule => {
       const { enabled } = getRuleSettings(rule.definition, config);
-      return enabled;
+      if (!enabled) return false;
+      
+      // Apply tier rule filter if available
+      if (tierConfig) {
+        const { categories, minSeverity, maxRulesPerCategory } = tierConfig.ruleFilter;
+        if (!categories.includes(rule.definition.category)) return false;
+        
+        // Severity check
+        const severityOrder: Severity[] = ['info', 'warning', 'error', 'critical'];
+        const ruleSeverityIndex = severityOrder.indexOf(rule.definition.defaultSeverity);
+        const minSeverityIndex = severityOrder.indexOf(minSeverity);
+        if (ruleSeverityIndex < minSeverityIndex) return false;
+      }
+      
+      return true;
     });
   }
 
@@ -2684,9 +2698,10 @@ export class RuleEngine {
     pages: Record<string, NormalizedPage>,
     config: SeoConfig,
     backlinkData?: RuleEvaluationContext['backlinkData'],
-    backlinkError?: string
+    backlinkError?: string,
+    tierConfig?: ExecutionTierConfig
   ): Promise<Finding[]> {
-    const activeRules = this.getRules(config);
+    const activeRules = this.getRules(config, tierConfig);
     const allFindings: Finding[] = [];
 
     const context: RuleEvaluationContext = {

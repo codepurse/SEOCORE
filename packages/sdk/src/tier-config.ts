@@ -70,7 +70,7 @@ export const TIER_PRESETS: Record<ExecutionTier, ExecutionTierConfig> = {
     tier: 'fast',
     crawl: {
       maxDepth: 1,
-      maxPages: 10,
+      maxPages: 1,
       concurrency: 5,
       rateLimitMs: 50,
       playwrightEnabled: false,
@@ -140,7 +140,7 @@ export const TIER_PRESETS: Record<ExecutionTier, ExecutionTierConfig> = {
       rateLimitMs: 250,
       playwrightEnabled: true,
       lighthouseEnabled: false,
-      lighthouseSampleRate: 0.1,
+      lighthouseSampleRate: 0,
     },
     modules: {
       core: true,

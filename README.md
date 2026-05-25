@@ -32,34 +32,41 @@
 
    ## ✨ Key Features
 
-   1. **High-Performance Concurrent Crawler**:
+   1. **Execution Tier System**:
+      - Tiers drive everything from crawl limits to rule selection and scoring behavior
+      - **Fast**: Core rules only, 1 page, static HTML
+      - **Standard**: + Performance, 100 pages, simulated CWV
+      - **Deep**: + All modules, 500 pages, Playwright rendering
+      - **Enterprise**: + Plugins, 5000 pages, Lighthouse sampling
+
+   2. **High-Performance Concurrent Crawler**:
       - Built-in rate-limiting, custom backoff delays, retry policies, and timeout handlers.
       - Respects robots.txt directives and extracts URLs from `sitemap.xml` automatically.
-   2. **Path Filtering (Inclusions/Exclusions)**:
+   3. **Path Filtering (Inclusions/Exclusions)**:
       - Restrict audits using wildcards (e.g. `/blog/*` or `*.html`).
       - Block admin sections or static resource patterns.
-   3. **Deep Redirect Hop & Loop Tracking**:
+   4. **Deep Redirect Hop & Loop Tracking**:
       - Manual redirection handling intercepts 3xx responses.
       - Traces complete redirect chains (statusCode and hops) and catches circular redirect loops.
-4. **Unified Structured Data & Entity Graph Auditor**:
+5. **Unified Structured Data & Entity Graph Auditor**:
    - Compiles Schema.org JSON-LD, Microdata, RDFa elements from raw source HTML and Playwright rendering.
    - Stitches nodes into an Entity Graph, resolves referencing pointers deeply, and maps DAG layouts safely.
    - Evaluates E-E-A-T markers (sameAs links pointing to Wikipedia/Wikidata/LinkedIn).
    - Cross-checks schema values (price, title, canonical URL) against HTML headers, canonicals, and OpenGraph/Twitter card tags.
-5. **Crawl Graph & Link Authority Analysis**:
+6. **Crawl Graph & Link Authority Analysis**:
    - Computes in-degree, out-degree, and custom authority scores (PageRank style).
    - Flags orphan pages and structural dead ends.
-6. **AI Visibility & LLM Crawler Directives Auditor**:
+7. **AI Visibility & LLM Crawler Directives Auditor**:
    - Evaluates brand visibility and structured indexing across search engines, chatbots, and AI crawlers.
    - Strictly validates crawlability configurations (robots.txt, sitemaps).
    - Audits `llms.txt` and `/.well-known/llms.txt` rules for GPTBot, ClaudeBot, PerplexityBot, and Google-Extended.
-7. **Mobile SEO Scorer & Evaluator**:
+8. **Mobile SEO Scorer & Evaluator**:
    - Evaluates mobile usability (viewport meta, responsive layouts, navigation toggle detection, tap targets).
    - Scores mobile performance (simulated Core Web Vitals including throttled mobile LCP, mobile CLS, JS payload and requests).
    - Verifies responsive design quality (CSS media queries, fluid layouts, standard mobile breakpoints).
    - Audits mobile indexing readiness (content parity, structured data validity, mobile-first canonical configuration).
    - Enforces `isVerifiable()` guards and strict empty states (non-pass by default) under static crawls, capping unverified performance scores at 50 to ensure high scores require real runtime validation.
-8. **E-E-A-T & Content Quality Analyzer**:
+9. **E-E-A-T & Content Quality Analyzer**:
    - Evaluates Experience, Expertise, Authoritativeness, and Trustworthiness (E-E-A-T) pillars.
    - Scores content readability (Flesch Reading Ease, Flesch-Kincaid Grade Level).
    - Analyzes content structure, word count, and internal link density.
@@ -67,25 +74,26 @@
    - Verifies AI citation readiness (structured data completeness, llms.txt presence, semantic HTML usage).
    - Provides actionable findings with severity levels.
    - Supports JSON and HTML report exports for documentation and CI/CD integration.
-9. **Outbound Authority Links & Google Rank Checker**:
+10. **Outbound Authority Links & Google Rank Checker**:
    - Analyzes backlink domains metrics (authority counts, referring domains, spam scores).
    - Verifies keywords visibility inside Google Top 10 Search Results via serpapi or headless browser automation.
-10. **Competitive Site Comparer**:
+11. **Competitive Site Comparer**:
    - Compares health metrics, performance budgets, metadata, and link structures across two different URLs or exported JSON audits.
-11. **Hreflang Validator**:
+12. **Hreflang Validator**:
     - Validates bidirectional hreflang links across pages.
     - Checks for consistent x-default configurations.
     - Validates language code formats.
     - Deep-crawls all hreflang-referenced pages with `--deep` option.
     - Exports validation reports in terminal and JSON formats.
-12. **Optional Headless Rendering**:
+13. **Optional Headless Rendering**:
     - Boot Playwright to parse single-page apps (SPAs) that require client-side execution.
-13. **Visual Screenshot Capture**:
+14. **Visual Screenshot Capture**:
     - Capture screenshots of your pages at different breakpoints (mobile, tablet, desktop).
     - Use Playwright device descriptors (e.g., "iPhone 15 Pro") for accurate mobile screenshots.
     - Capture full-page screenshots of your website.
     - Deep crawl to capture screenshots for all pages listed in your sitemap.
-14. **Production-Ready Reporting**:
+15. **Production-Ready Reporting**:
+
     - Real-time colored terminal logging via custom EventBus.
     - Exports rich, detailed audit logs in terminal, JSON, HTML, and SARIF formats.
 
@@ -151,9 +159,24 @@
    ```
 
    #### 2. Run a Site Audit
-   Audit a website's landing page (default standard preset):
+   Audit a website's landing page (default standard tier):
    ```bash
    npm run cli -- audit https://example.com
+   ```
+
+   Audit using specific tiers:
+   ```bash
+   # Fast tier (core rules, 1 page, static HTML)
+   npm run cli -- audit https://example.com --tier fast
+
+   # Standard tier (core + performance, 100 pages, simulated CWV)
+   npm run cli -- audit https://example.com --tier standard
+
+   # Deep tier (all modules, 500 pages, Playwright rendering)
+   npm run cli -- audit https://example.com --tier deep
+
+   # Enterprise tier (all modules + plugins, 5000 pages, Lighthouse sampling)
+   npm run cli -- audit https://example.com --tier enterprise
    ```
 
    Export audit as HTML report:
@@ -179,7 +202,13 @@
    npm run cli -- rules:list
    ```
 
-   #### 6. Analyze AI Visibility & Structure
+   #### 6. List Available Execution Tiers
+   See all available tiers, their capabilities, and configurations:
+   ```bash
+   npm run cli -- tier:list
+   ```
+
+   #### 7. Analyze AI Visibility & Structure
    Evaluate search engine/chatbot discovery, metadata structure, citation readiness, and entity mapping:
    ```bash
    npm run cli -- ai-visibility https://example.com
@@ -190,7 +219,7 @@
    npm run cli -- ai-visibility https://example.com --json
    ```
 
-   #### 7. Analyze E-E-A-T & Content Quality
+   #### 8. Analyze E-E-A-T & Content Quality
    Evaluate Experience, Expertise, Authoritativeness, and Trustworthiness (E-E-A-T), content readability, structure, and AI citation readiness:
    ```bash
    npm run cli -- content https://example.com/blog/post
@@ -213,7 +242,7 @@
    npm run cli -- content https://example.com --ci --budget-eeat 70 --budget-content 75
    ```
 
-   #### 8. Validate Schema.org Structured Data & Entity Graph
+   #### 9. Validate Schema.org Structured Data & Entity Graph
    Validate Schema.org JSON-LD, Microdata, and RDFa structures. Performs E-E-A-T trust audits, metadata integrity cross-checks, and builds dynamic visual entity graphs (DAG):
    ```bash
    npm run cli -- schema https://example.com
@@ -229,31 +258,31 @@
    npm run cli -- schema https://example.com --format sarif --output ./schema-report.sarif
    ```
 
-   #### 9. Check robots.txt Directives
+   #### 10. Check robots.txt Directives
    Verify robots.txt access rules, exclusions, and sitemap references:
    ```bash
    npm run cli -- robots https://example.com
    ```
 
-   #### 9. Check sitemap.xml Coverage
+   #### 11. Check sitemap.xml Coverage
    Analyze sitemap.xml and verify all linked URLs are reachable:
    ```bash
    npm run cli -- sitemap https://example.com --check-links
    ```
 
-   #### 10. Audit LLMs Directives
+   #### 12. Audit LLMs Directives
    Verify `llms.txt` and `/.well-known/llms.txt` rules for AI crawlers like GPTBot, ClaudeBot, and PerplexityBot:
    ```bash
    npm run cli -- llms-txt https://example.com
    ```
 
-   #### 11. Analyze Domain Backlinks
+   #### 13. Analyze Domain Backlinks
    Extract backlink profiles and analyze referring domain authority and spam scores:
    ```bash
    npm run cli -- backlinks https://example.com
    ```
 
-   #### 12. Validate Hreflang Tags
+   #### 14. Validate Hreflang Tags
    Validate a website's hreflang tags for bidirectional links, x-default consistency, and language code validity:
    ```bash
    npm run cli -- hreflang https://example.com
@@ -269,19 +298,19 @@
    npm run cli -- hreflang https://example.com --json --output hreflang-report.json
    ```
 
-   #### 13. Google Rank Checker
+   #### 15. Google Rank Checker
    Check if a target website ranks in Google's top 10 organic results for a given keyword:
    ```bash
    npm run cli -- rank-check "seo crawler" https://example.com
    ```
 
-   #### 14. Compare Site Audits
+   #### 16. Compare Site Audits
    Compare SEO health scores, metadata differences, and performance metrics across two websites or audit files:
    ```bash
    npm run cli -- compare https://site-a.com https://site-b.com --focus technical
    ```
 
-   #### 15. Capture Visual Screenshots
+   #### 17. Capture Visual Screenshots
    Capture screenshots of a target page or entire website:
    ```bash
    # Basic desktop screenshot
@@ -312,7 +341,7 @@
 
    ```typescript
    import { SeoEngine } from '@seocore/engine';
-   import { EventBus } from '@seocore/sdk';
+   import { EventBus, ExecutionTier } from '@seocore/sdk';
 
    // Initialize the real-time event bus
    const eventBus = new EventBus();
@@ -321,13 +350,13 @@
    console.log(`Crawled: ${data.url} | Status: ${data.statusCode}`);
    });
 
-   // Run audit
+   // Run audit using a tier
    const engine = new SeoEngine(eventBus);
-   const result = await engine.run('https://example.com', {
-   preset: 'standard',
-   maxPages: 10,
-   maxDepth: 2,
-   });
+   const result = await engine.run(
+   'https://example.com', 
+   { /* optional overrides here */ },
+   ExecutionTier.STANDARD
+   );
 
    console.log(`Overall Health Score: ${result.score}%`);
    ```
@@ -342,7 +371,8 @@
 
    | Option | Type | Default | Description |
    | :--- | :--- | :--- | :--- |
-   | `preset` | `"quick" \| "standard" \| "deep" \| "enterprise"` | `"standard"` | Scrape profile adjusting page/depth depth limits. |
+   | `tier` | `"fast" \| "standard" \| "deep" \| "enterprise"` | `"standard"` | Execution tier driving crawl limits, rules, and scoring. Overrides `preset`. |
+   | `preset` | `"quick" \| "standard" \| "deep" \| "enterprise"` | `"standard"` | Scrape profile adjusting page/depth depth limits (legacy, use `tier`). |
    | `concurrency` | `number` | `5` | Maximum simultaneous page crawl requests. |
    | `maxDepth` | `number` | `3` | Distance of steps allowed from seed landing URL. |
    | `maxPages` | `number` | `100` | Hard cap on total crawled pages per audit. |

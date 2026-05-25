@@ -3,7 +3,7 @@
 import { Command } from 'commander';
 import pc from 'picocolors';
 import { SeoEngine } from '@seocore/engine';
-import { EventBus, Severity, AuditPreset, Category, Backlink, AuditResult } from '@seocore/sdk';
+import { EventBus, Severity, AuditPreset, Category, Backlink, AuditResult, ExecutionTier, TIER_PRESETS } from '@seocore/sdk';
 import { TerminalReporter, JsonReporter, HtmlReporter, SarifReporter, CompareEngine } from '@seocore/reporter';
 import { initConfigFile, resolveConfig } from '@seocore/config';
 import { RuleEngine } from '@seocore/rules';
@@ -27,8 +27,9 @@ program
   .command('audit')
   .description('Audit a website for SEO, speed, indexing, accessibility, and metadata')
   .argument('<url>', 'Target website starting URL (e.g. https://example.com)')
+  .option('-t, --tier <tier>', 'Execution tier: fast, standard, deep, enterprise (overrides preset)')
   .option('-p, --preset <preset>', 'Audit preset: quick, standard, deep, enterprise', 'standard')
-  .option('--full', 'Crawl the entire site based on preset limits (multi-page scan)', false)
+  .option('--full', 'Crawl the entire site based on tier/preset limits (multi-page scan)', false)
   .option('-d, --depth <number>', 'Override crawling depth limit', parseInt)
   .option('-m, --max-pages <number>', 'Override maximum pages to audit', parseInt)
   .option('-c, --concurrency <number>', 'Override concurrency limit', parseInt)
@@ -130,44 +131,57 @@ program
         console.log(pc.green('✔  Scoring calculated. Generating reports...'));
       });
 
+      // Parse and validate tier if provided
+      let tier: ExecutionTier | undefined;
+      if (options.tier) {
+        const validTiers = Object.keys(TIER_PRESETS) as ExecutionTier[];
+        if (!validTiers.includes(options.tier as ExecutionTier)) {
+          console.error(pc.red(`Error: Invalid tier. Must be one of: ${validTiers.join(', ')}`));
+          process.exit(1);
+        }
+        tier = options.tier as ExecutionTier;
+      }
+
       const engine = new SeoEngine(eventBus);
-      const result = await engine.run(url, partialConfig);
+      const result = await engine.run(url, partialConfig, tier);
 
       // Update AI Visibility score with strict, granular scoring
-      try {
-        const { runAiVisibility } = await import('./ai-visibility/index.js');
-        const aiVisResult = await runAiVisibility(url, { silent: true });
+    let aiVisBreakdown: any = null;
+    try {
+      const { runAiVisibility } = await import('./ai-visibility/index.js');
+      const aiVisResult = await runAiVisibility(url, { silent: true });
+      aiVisBreakdown = aiVisResult.breakdown;
+      
+      if (result.categories && result.categories.ai_visibility) {
+        result.categories.ai_visibility.score = aiVisResult.score;
+        result.categories.ai_visibility.totalDeductions = Math.round((100 - aiVisResult.score) * 10) / 10;
         
-        if (result.categories && result.categories.ai_visibility) {
-          result.categories.ai_visibility.score = aiVisResult.score;
-          result.categories.ai_visibility.totalDeductions = Math.round((100 - aiVisResult.score) * 10) / 10;
-          
-          // Recompute total score based on CATEGORY_WEIGHTS
-          const CATEGORY_WEIGHTS: Record<string, number> = {
-          indexing: 0.15,
-          metadata: 0.15,
-          links: 0.10,
-          seo: 0.10,
-          ai_visibility: 0.15,
-          accessibility: 0.10,
-          performance: 0.10,
-          mobile_seo: 0.15,
-          backlink_intelligence: 0.10,
-        };
-          
-          let weightedSum = 0;
-          let weightTotal = 0;
-          for (const cat of Object.keys(result.categories)) {
-            const catTyped = cat as Category;
-            const catWeight = CATEGORY_WEIGHTS[catTyped] ?? 0;
-            weightedSum += result.categories[catTyped].score * catWeight;
-            weightTotal += catWeight;
-          }
-          result.score = weightTotal > 0 ? Math.round(weightedSum / weightTotal) : 100;
+        // Recompute total score based on CATEGORY_WEIGHTS
+        const CATEGORY_WEIGHTS: Record<string, number> = {
+        indexing: 0.15,
+        metadata: 0.15,
+        links: 0.10,
+        seo: 0.10,
+        ai_visibility: 0.15,
+        accessibility: 0.10,
+        performance: 0.10,
+        mobile_seo: 0.15,
+        backlink_intelligence: 0.10,
+      };
+      
+        let weightedSum = 0;
+        let weightTotal = 0;
+        for (const cat of Object.keys(result.categories)) {
+          const catTyped = cat as Category;
+          const catWeight = CATEGORY_WEIGHTS[catTyped] ?? 0;
+          weightedSum += result.categories[catTyped].score * catWeight;
+          weightTotal += catWeight;
         }
-      } catch {
-        // Fallback gracefully
+        result.score = weightTotal > 0 ? Math.round(weightedSum / weightTotal) : 100;
       }
+    } catch {
+      // Fallback gracefully
+    }
 
       // Export JSON if requested
       if (options.format === 'json' || options.format === 'both' || options.format === 'all') {
@@ -195,7 +209,7 @@ program
         TerminalReporter.report(result, {
           verbose: options.verbose,
           minSeverity: options.minSeverity as Severity,
-        });
+        }, aiVisBreakdown);
       }
 
       // CI Mode: Check for failures and exit codes
@@ -328,6 +342,40 @@ program
     } catch (err: any) {
       console.error(pc.red(`\nCrawl failed: ${err.message}`));
       process.exit(1);
+    }
+  });
+
+// ==========================================
+// 2.5. TIER:LIST COMMAND
+// ==========================================
+program
+  .command('tier:list')
+  .description('List all available execution tiers with their details')
+  .action(() => {
+    console.log(pc.bold(pc.cyan('\nEXECUTION TIERS:')));
+    console.log(pc.gray('─────────────────────────────────────────────────────────────────────────────────'));
+    
+    const tiers = Object.keys(TIER_PRESETS) as ExecutionTier[];
+    const tierDescriptions: Record<string, string> = {
+      fast: 'Core rules only, 1 page, static HTML',
+      standard: '+ Performance, 100 pages, simulated CWV',
+      deep: '+ All modules, 500 pages, Playwright rendering',
+      enterprise: '+ Plugins, 5000 pages, Lighthouse sampling'
+    };
+    
+    for (const tier of tiers) {
+      const config = TIER_PRESETS[tier];
+      const tierColor = 
+        tier === 'fast' ? pc.green :
+        tier === 'standard' ? pc.cyan :
+        tier === 'deep' ? pc.yellow :
+        pc.magenta;
+      
+      console.log(`${tierColor(pc.bold(tier.toUpperCase().padEnd(12)))} ${tierDescriptions[tier]}`);
+      console.log(`  ${pc.gray('Max Pages:')} ${config.crawl.maxPages}, ${pc.gray('Max Depth:')} ${config.crawl.maxDepth}, ${pc.gray('Concurrency:')} ${config.crawl.concurrency}`);
+      console.log(`  ${pc.gray('Playwright:')} ${config.crawl.playwrightEnabled ? pc.green('Enabled') : pc.gray('Disabled')}, ${pc.gray('Lighthouse:')} ${config.crawl.lighthouseEnabled ? pc.green('Enabled') : pc.gray('Disabled')}`);
+      console.log(`  ${pc.gray('Rules:')} ${config.ruleFilter.categories.join(', ')}`);
+      console.log();
     }
   });
 

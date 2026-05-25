@@ -6,7 +6,10 @@ import {
   NormalizedPage,
   SeoConfig,
   SeoPlugin,
-  RuleDefinition
+  RuleDefinition,
+  ExecutionTier,
+  ExecutionTierConfig,
+  TIER_PRESETS
 } from '@seocore/sdk';
 import { resolveConfig } from '@seocore/config';
 import { createBacklinkClient } from '@seocore/backlinks';
@@ -59,8 +62,40 @@ export class SeoEngine {
     }
   }
 
-  async run(startUrl: string, partialConfig: Partial<SeoConfig> = {}): Promise<AuditResult> {
-    const config = resolveConfig(partialConfig);
+  async run(startUrl: string, partialConfig: Partial<SeoConfig> = {}, tier?: ExecutionTier): Promise<AuditResult> {
+    // Determine tier config
+    let tierConfig: ExecutionTierConfig | undefined;
+    if (tier) {
+      tierConfig = TIER_PRESETS[tier];
+    } else if (partialConfig.preset) {
+      // Map preset to tier (quick -> fast)
+      const presetToTier: Record<string, ExecutionTier> = {
+        quick: 'fast',
+        standard: 'standard',
+        deep: 'deep',
+        enterprise: 'enterprise'
+      };
+      const mappedTier = presetToTier[partialConfig.preset];
+      if (mappedTier) {
+        tierConfig = TIER_PRESETS[mappedTier];
+      }
+    }
+
+    // Resolve config, merging tier settings with user overrides
+    let config = resolveConfig(partialConfig);
+    
+    // Apply tier config crawl settings if available
+    if (tierConfig) {
+      config = {
+        ...config,
+        maxDepth: tierConfig.crawl.maxDepth,
+        maxPages: tierConfig.crawl.maxPages,
+        concurrency: tierConfig.crawl.concurrency,
+        rateLimitMs: tierConfig.crawl.rateLimitMs,
+        playwrightEnabled: tierConfig.crawl.playwrightEnabled,
+        lighthouseEnabled: tierConfig.crawl.lighthouseEnabled
+      };
+    }
 
     // Instantiate crawler based on config
     if (config.lighthouseEnabled) {
@@ -236,8 +271,8 @@ export class SeoEngine {
       }
     }
 
-    // 3. Evaluate SEO Rules
-    let findings = await this.ruleEngine.run(pages, config, backlinkData, backlinkError);
+    // 3. Evaluate SEO rules
+    let findings = await this.ruleEngine.run(pages, config, backlinkData, backlinkError, tierConfig);
 
     // 4. Run lifecycle hook: onAfterAnalysis (allowing mutations)
     for (const plugin of this.plugins) {
@@ -249,9 +284,9 @@ export class SeoEngine {
 
     await this.eventBus.emit('analyzer:completed', { url: startUrl, findingsCount: findings.length });
 
-    // 5. Calculate Score
-    const ruleDefs: RuleDefinition[] = this.ruleEngine.getRules(config).map((r) => r.definition);
-    const scoringResult = ScoringEngine.calculate(findings, visited.size, config, ruleDefs);
+    // 5. Calculate score
+    const ruleDefs: RuleDefinition[] = this.ruleEngine.getRules(config, tierConfig).map((r) => r.definition);
+    const scoringResult = ScoringEngine.calculate(findings, visited.size, config, ruleDefs, tierConfig);
 
     await this.eventBus.emit('score:calculated', {
       score: scoringResult.score,

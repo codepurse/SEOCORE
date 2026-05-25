@@ -1,7 +1,15 @@
 import { z } from 'zod';
-import { SeoConfig, AuditPreset, Severity, BacklinkApiConfig } from '@seocore/sdk';
+import { SeoConfig, AuditPreset, Severity, BacklinkApiConfig, ExecutionTier, TIER_PRESETS, ExecutionTierConfig } from '@seocore/sdk';
 import * as fs from 'fs';
 import * as path from 'path';
+
+// Map old preset names to new execution tiers
+const PRESET_TO_TIER: Record<AuditPreset, ExecutionTier> = {
+  quick: 'fast',
+  standard: 'standard',
+  deep: 'deep',
+  enterprise: 'enterprise',
+};
 
 // Define the schema using Zod
 const BingBacklinkSourceConfigSchema = z.object({
@@ -54,53 +62,47 @@ export const SeoConfigSchema = z.object({
   backlinks: BacklinkApiConfigSchema,
 });
 
-export const DEFAULT_CONFIG: SeoConfig = {
-  preset: 'standard',
-  concurrency: 3,
-  maxDepth: 3,
-  maxPages: 100,
-  rateLimitMs: 100,
-  retryCount: 2,
-  playwrightEnabled: false,
-  lighthouseEnabled: true,
-  excludePatterns: [],
-  includePatterns: [],
-  ruleOverrides: {},
-};
+/**
+ * Gets the execution tier config for a given preset or execution tier name.
+ */
+export function getTierConfig(tierOrPreset: ExecutionTier | AuditPreset): ExecutionTierConfig {
+  const tier = PRESET_TO_TIER[tierOrPreset as AuditPreset] || tierOrPreset;
+  return TIER_PRESETS[tier as ExecutionTier];
+}
 
+/**
+ * Converts an ExecutionTierConfig to a SeoConfig.
+ */
+export function tierConfigToSeoConfig(tierConfig: ExecutionTierConfig, overrides: Partial<SeoConfig> = {}): SeoConfig {
+  const baseConfig: Partial<SeoConfig> = {
+    preset: tierConfig.tier as unknown as AuditPreset,
+    concurrency: tierConfig.crawl.concurrency,
+    maxDepth: tierConfig.crawl.maxDepth,
+    maxPages: tierConfig.crawl.maxPages,
+    rateLimitMs: tierConfig.crawl.rateLimitMs,
+    playwrightEnabled: tierConfig.crawl.playwrightEnabled,
+    lighthouseEnabled: tierConfig.crawl.lighthouseEnabled,
+  };
+
+  // Add lighthouseSampleCount based on sample rate and max pages (simplified)
+  if (tierConfig.crawl.lighthouseSampleRate > 0) {
+    baseConfig.lighthouseSampleCount = Math.max(1, Math.floor(tierConfig.crawl.maxPages * tierConfig.crawl.lighthouseSampleRate));
+  }
+
+  return {
+    ...baseConfig,
+    ...overrides,
+  } as SeoConfig;
+}
+
+export const DEFAULT_CONFIG: SeoConfig = tierConfigToSeoConfig(TIER_PRESETS.standard);
+
+// Keep PRESET_CONFIGS for backward compatibility
 export const PRESET_CONFIGS: Record<AuditPreset, Partial<SeoConfig>> = {
-  quick: {
-    preset: 'quick',
-    concurrency: 5,
-    maxDepth: 1,
-    maxPages: 10,
-    playwrightEnabled: false,
-    rateLimitMs: 50,
-  },
-  standard: {
-    preset: 'standard',
-    concurrency: 3,
-    maxDepth: 3,
-    maxPages: 100,
-    playwrightEnabled: false,
-    rateLimitMs: 100,
-  },
-  deep: {
-    preset: 'deep',
-    concurrency: 2,
-    maxDepth: 5,
-    maxPages: 500,
-    playwrightEnabled: true,
-    rateLimitMs: 250,
-  },
-  enterprise: {
-    preset: 'enterprise',
-    concurrency: 8,
-    maxDepth: 10,
-    maxPages: 5000,
-    playwrightEnabled: true,
-    rateLimitMs: 50,
-  },
+  quick: tierConfigToSeoConfig(TIER_PRESETS.fast),
+  standard: tierConfigToSeoConfig(TIER_PRESETS.standard),
+  deep: tierConfigToSeoConfig(TIER_PRESETS.deep),
+  enterprise: tierConfigToSeoConfig(TIER_PRESETS.enterprise),
 };
 
 /**
