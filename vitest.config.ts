@@ -15,6 +15,9 @@ export default defineConfig({
       '@seocore/scoring': resolve(__dirname, './packages/scoring/src/index.ts'),
       '@seocore/reporter': resolve(__dirname, './packages/reporter/src/index.ts'),
       '@seocore/engine': resolve(__dirname, './packages/engine/src/index.ts'),
+      '@seocore/rule-utils': resolve(__dirname, './packages/rule-utils/src/index.ts'),
+      '@seocore/rules-core': resolve(__dirname, './packages/rules-core/src/index.ts'),
+      '@seocore/scoring-core': resolve(__dirname, './packages/scoring-core/src/index.ts'),
     },
   },
 });

@@ -20,7 +20,10 @@
       "@seocore/scoring": ["packages/scoring/src/index.ts"],
       "@seocore/reporter": ["packages/reporter/src/index.ts"],
       "@seocore/backlinks": ["packages/backlinks/src/index.ts"],
-      "@seocore/engine": ["packages/engine/src/index.ts"]
+      "@seocore/engine": ["packages/engine/src/index.ts"],
+      "@seocore/rule-utils": ["packages/rule-utils/src/index.ts"],
+      "@seocore/rules-core": ["packages/rules-core/src/index.ts"],
+      "@seocore/scoring-core": ["packages/scoring-core/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "dist", "**/*.test.ts", "debug-rank-checker.ts", "debug-google-results.html"]

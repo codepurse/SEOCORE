@@ -350,3 +350,5 @@ export class EventBus {
     }
   }
 }
+
+export * from './tier-config.js';
