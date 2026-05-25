@@ -421,6 +421,47 @@ program
   });
 
 // ==========================================
+// 6. CONTENT / E-E-A-T COMMAND
+// ==========================================
+program
+  .command('content')
+  .alias('eeat')
+  .description('E-E-A-T & Content Quality analysis with AI citation readiness')
+  .argument('<url>', 'Target URL (e.g. https://example.com/blog/post)')
+  .option('--deep', 'Analyze all pages on site instead of just landing', false)
+  .option('--focus <categories>', 'Focus on specific categories (comma-separated)')
+  .option('--json', 'Output results in raw JSON format', false)
+  .option('-f, --format <format>', 'Output format: terminal, json, html', 'terminal')
+  .option('-o, --output <path>', 'Export file path')
+  .option('--ci', 'Enable CI mode with non-zero exit codes', false)
+  .option('--budget-eeat <score>', 'Fail CI if overall E-E-A-T score is below this number')
+  .option('--budget-content <score>', 'Fail CI if overall content quality score is below this number')
+  .action(async (url, options) => {
+    try {
+      // Validate starting URL protocol
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        console.error(pc.red('Error: Target URL must start with http:// or https://'));
+        process.exit(1);
+      }
+
+      const { runContentCommand } = await import('./content/index.js');
+      await runContentCommand(url, {
+        deep: options.deep,
+        focus: options.focus,
+        json: options.json,
+        format: options.format as any,
+        output: options.output,
+        ci: options.ci,
+        budgetEeat: options.budgetEeat ? Number(options.budgetEeat) : undefined,
+        budgetContent: options.budgetContent ? Number(options.budgetContent) : undefined
+      });
+    } catch (err: any) {
+      console.error(pc.red(`\nE-E-A-T & Content Quality analysis failed: ${err.message}`));
+      process.exit(1);
+    }
+  });
+
+// ==========================================
 // 6. ROBOTS COMMAND
 // ==========================================
 program
@@ -1241,5 +1282,118 @@ program
   .option('-f, --format <format>', 'Output format: terminal, json, sarif', 'terminal')
   .option('-o, --output <path>', 'Export to file')
   .action(schemaAction);
+
+program
+  .command('hreflang')
+  .description('Validate a website\'s hreflang tags')
+  .argument('<url>', 'Target website URL (e.g., https://example.com)')
+  .option('--deep', 'Validate all pages on the site', false)
+  .option('--lang <codes>', 'Filter to specific languages (comma-separated)')
+  .option('--json', 'Output results in raw JSON format', false)
+  .option('-f, --format <format>', 'Output format: terminal, json', 'terminal')
+  .option('-o, --output <path>', 'Export to file')
+  .action(async (url, options) => {
+    try {
+      // Validate starting URL protocol
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        console.error(pc.red('Error: Target URL must start with http:// or https://'));
+        process.exit(1);
+      }
+
+      const isJson = options.json || options.format === 'json';
+      const spinner = new Spinner(`Validating hreflang tags for ${url}...`);
+      if (!isJson) spinner.start();
+
+      const { HttpCrawler } = await import('@seocore/crawler');
+      const { PageNormalizer, HreflangValidator } = await import('@seocore/analyzers');
+      const { resolveConfig } = await import('@seocore/config');
+      const config = resolveConfig();
+      const crawler = new HttpCrawler();
+      const validator = new HreflangValidator();
+
+      // First crawl the main page
+      const mainResult = await crawler.crawl(url, config);
+      if (mainResult.statusCode !== 200) {
+        throw new Error(`Failed to load target page: HTTP ${mainResult.statusCode}`);
+      }
+      const mainPage = PageNormalizer.normalize(mainResult);
+
+      // Collect all pages to check
+      const pagesToCheck = [mainPage];
+
+      // If --deep, crawl all hreflang URLs
+      if (options.deep) {
+        const uniqueUrls = new Set<string>();
+        for (const alt of mainPage.hreflang) {
+          uniqueUrls.add(alt.url);
+        }
+
+        for (const altUrl of uniqueUrls) {
+          try {
+            const result = await crawler.crawl(altUrl, config);
+            if (result.statusCode === 200) {
+              pagesToCheck.push(PageNormalizer.normalize(result));
+            }
+          } catch {
+            // Ignore errors for deep crawl
+          }
+        }
+      }
+
+      // Validate
+      const validationResult = validator.validate(pagesToCheck);
+
+      if (!isJson) spinner.stop('Finished hreflang validation.');
+
+      // Import reporter
+      const { HreflangReporter } = await import('./hreflang/reporter.js');
+
+      if (isJson) {
+        const output = HreflangReporter.exportJson(validationResult, options.output);
+        if (options.output) {
+          console.log(pc.green(`✓ JSON report saved to ${output}`));
+        } else {
+          console.log(output);
+        }
+        return;
+      }
+
+      // Terminal output
+      HreflangReporter.report(validationResult, url);
+
+    } catch (err: any) {
+      console.error(pc.red(`\nHreflang validation failed: ${err.message}`));
+      process.exit(1);
+    }
+  });
+
+// ==========================================
+// 11. SCREENSHOT COMMAND
+// ==========================================
+program
+  .command('screenshot')
+  .description('Capture visual screenshots of target page/site')
+  .argument('<url>', 'Target URL')
+  .option('--breakpoints <sizes>', 'Viewport breakpoints (comma-separated: mobile,tablet,desktop)')
+  .option('--device <name>', 'Use Playwright device descriptor (e.g., "iPhone 15 Pro")')
+  .option('--full-page', 'Capture full-page screenshots (not just viewport)')
+  .option('--deep', 'Capture screenshots for all pages on site instead of just landing')
+  .option('-o, --output <path>', 'Output directory for screenshots (default: ./screenshots)')
+  .option('-c, --config <path>', 'Path to seocore.config.json')
+  .option('--timeout <ms>', 'Navigation timeout in milliseconds (default: 30000)', '30000')
+  .action(async (url, options) => {
+    try {
+      // Validate starting URL protocol
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        console.error(pc.red('Error: Target URL must start with http:// or https://'));
+        process.exit(1);
+      }
+      const { captureScreenshots } = await import('./screenshot.js');
+      await captureScreenshots(url, options);
+    } catch (err: any) {
+      console.error(pc.red(`\nScreenshot capture failed: ${err.message}`));
+      process.exit(1);
+    }
+  });
 
 program.parse(process.argv);

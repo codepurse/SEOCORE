@@ -59,14 +59,33 @@
    - Verifies responsive design quality (CSS media queries, fluid layouts, standard mobile breakpoints).
    - Audits mobile indexing readiness (content parity, structured data validity, mobile-first canonical configuration).
    - Enforces `isVerifiable()` guards and strict empty states (non-pass by default) under static crawls, capping unverified performance scores at 50 to ensure high scores require real runtime validation.
-8. **Outbound Authority Links & Google Rank Checker**:
+8. **E-E-A-T & Content Quality Analyzer**:
+   - Evaluates Experience, Expertise, Authoritativeness, and Trustworthiness (E-E-A-T) pillars.
+   - Scores content readability (Flesch Reading Ease, Flesch-Kincaid Grade Level).
+   - Analyzes content structure, word count, and internal link density.
+   - Extracts top keywords and checks for keyword stuffing.
+   - Verifies AI citation readiness (structured data completeness, llms.txt presence, semantic HTML usage).
+   - Provides actionable findings with severity levels.
+   - Supports JSON and HTML report exports for documentation and CI/CD integration.
+9. **Outbound Authority Links & Google Rank Checker**:
    - Analyzes backlink domains metrics (authority counts, referring domains, spam scores).
    - Verifies keywords visibility inside Google Top 10 Search Results via serpapi or headless browser automation.
-9. **Competitive Site Comparer**:
+10. **Competitive Site Comparer**:
    - Compares health metrics, performance budgets, metadata, and link structures across two different URLs or exported JSON audits.
-10. **Optional Headless Rendering**:
+11. **Hreflang Validator**:
+    - Validates bidirectional hreflang links across pages.
+    - Checks for consistent x-default configurations.
+    - Validates language code formats.
+    - Deep-crawls all hreflang-referenced pages with `--deep` option.
+    - Exports validation reports in terminal and JSON formats.
+12. **Optional Headless Rendering**:
     - Boot Playwright to parse single-page apps (SPAs) that require client-side execution.
-11. **Production-Ready Reporting**:
+13. **Visual Screenshot Capture**:
+    - Capture screenshots of your pages at different breakpoints (mobile, tablet, desktop).
+    - Use Playwright device descriptors (e.g., "iPhone 15 Pro") for accurate mobile screenshots.
+    - Capture full-page screenshots of your website.
+    - Deep crawl to capture screenshots for all pages listed in your sitemap.
+14. **Production-Ready Reporting**:
     - Real-time colored terminal logging via custom EventBus.
     - Exports rich, detailed audit logs in terminal, JSON, HTML, and SARIF formats.
 
@@ -171,7 +190,30 @@
    npm run cli -- ai-visibility https://example.com --json
    ```
 
-   #### 7. Validate Schema.org Structured Data & Entity Graph
+   #### 7. Analyze E-E-A-T & Content Quality
+   Evaluate Experience, Expertise, Authoritativeness, and Trustworthiness (E-E-A-T), content readability, structure, and AI citation readiness:
+   ```bash
+   npm run cli -- content https://example.com/blog/post
+   # or using the alias
+   npm run cli -- eeat https://example.com/blog/post
+   ```
+
+   Export as JSON:
+   ```bash
+   npm run cli -- content https://example.com --json --output content-report.json
+   ```
+
+   Export as HTML:
+   ```bash
+   npm run cli -- content https://example.com --format html --output content-report.html
+   ```
+
+   CI Mode with budgets:
+   ```bash
+   npm run cli -- content https://example.com --ci --budget-eeat 70 --budget-content 75
+   ```
+
+   #### 8. Validate Schema.org Structured Data & Entity Graph
    Validate Schema.org JSON-LD, Microdata, and RDFa structures. Performs E-E-A-T trust audits, metadata integrity cross-checks, and builds dynamic visual entity graphs (DAG):
    ```bash
    npm run cli -- schema https://example.com
@@ -187,7 +229,7 @@
    npm run cli -- schema https://example.com --format sarif --output ./schema-report.sarif
    ```
 
-   #### 8. Check robots.txt Directives
+   #### 9. Check robots.txt Directives
    Verify robots.txt access rules, exclusions, and sitemap references:
    ```bash
    npm run cli -- robots https://example.com
@@ -211,16 +253,57 @@
    npm run cli -- backlinks https://example.com
    ```
 
-   #### 12. Google Rank Checker
+   #### 12. Validate Hreflang Tags
+   Validate a website's hreflang tags for bidirectional links, x-default consistency, and language code validity:
+   ```bash
+   npm run cli -- hreflang https://example.com
+   ```
+
+   Deep-crawl all hreflang-referenced pages for full validation:
+   ```bash
+   npm run cli -- hreflang https://example.com --deep
+   ```
+
+   Export validation report as JSON:
+   ```bash
+   npm run cli -- hreflang https://example.com --json --output hreflang-report.json
+   ```
+
+   #### 13. Google Rank Checker
    Check if a target website ranks in Google's top 10 organic results for a given keyword:
    ```bash
    npm run cli -- rank-check "seo crawler" https://example.com
    ```
 
-   #### 13. Compare Site Audits
+   #### 14. Compare Site Audits
    Compare SEO health scores, metadata differences, and performance metrics across two websites or audit files:
    ```bash
    npm run cli -- compare https://site-a.com https://site-b.com --focus technical
+   ```
+
+   #### 15. Capture Visual Screenshots
+   Capture screenshots of a target page or entire website:
+   ```bash
+   # Basic desktop screenshot
+   npm run cli -- screenshot https://example.com
+
+   # Capture at multiple breakpoints
+   npm run cli -- screenshot https://example.com --breakpoints mobile,tablet,desktop
+
+   # Capture full-page screenshots
+   npm run cli -- screenshot https://example.com --full-page
+
+   # Use specific Playwright device
+   npm run cli -- screenshot https://example.com --device "iPhone 15 Pro"
+
+   # Deep crawl and capture screenshots of all pages from sitemap
+   npm run cli -- screenshot https://example.com --deep
+
+   # Custom output directory
+   npm run cli -- screenshot https://example.com --output ./my-screenshots
+
+   # Custom navigation timeout (ms)
+   npm run cli -- screenshot https://example.com --timeout 60000
    ```
 
    ### SDK Integration

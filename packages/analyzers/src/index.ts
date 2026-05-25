@@ -8,6 +8,11 @@ export type { GraphNode, HierarchyNode } from './schema-graph.js';
 export { DynamicOntologyParser } from './ontology-parser.js';
 export type { OntologyType, OntologyProperty } from './ontology-parser.js';
 
+export { HreflangValidator, type HreflangValidationResult, type HreflangValidationIssue, type HreflangPage } from './hreflang-validator.js';
+export { ContentAnalyzer, type ContentAnalysis } from './content-analyzer.js';
+export { EeatAnalyzer, type EeatAnalysis } from './eeat-analyzer.js';
+export { AiCitationReadinessAnalyzer, type AiCitationReadiness } from './ai-citation-readiness.js';
+
 export class PageNormalizer {
   static normalize(result: CrawlResult): NormalizedPage {
     const { url, html, statusCode, loadTimeMs, contentType, redirectChain } = result;
