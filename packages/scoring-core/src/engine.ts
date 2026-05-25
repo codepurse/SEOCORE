@@ -1,6 +1,7 @@
-import type { Category, CategoryScore, Finding, SeoConfig, Severity, RuleDefinition } from '@seocore/sdk';
-import type { ExecutionTierConfig } from '@seocore/sdk';
+import type { Category, CategoryScore, Finding, SeoConfig, Severity, RuleDefinition, ExecutionTierConfig } from '@seocore/sdk';
 import { DEFAULT_CATEGORY_WEIGHTS, DEFAULT_FLOOR_SCORES } from '@seocore/sdk';
+import { calculateMobileScore } from './mobile-scoring.js';
+import { calculateSecurityScore } from './security-scoring.js';
 
 const SEVERITY_MULTIPLIERS: Record<Severity, number> = {
   critical: 1.5,
@@ -29,7 +30,6 @@ export class ScoringEngine {
     const categories = this.initCategories();
     const categoryDeductions = this.initCategoryDeductions();
 
-    // Count findings by severity per category
     for (const finding of findings) {
       const catScore = categories[finding.category];
       if (catScore) {
@@ -37,14 +37,12 @@ export class ScoringEngine {
       }
     }
 
-    // Map rule definitions for weight lookup
     const ruleWeights = new Map<string, number>();
     for (const rDef of ruleDefinitions) {
       const override = config.ruleOverrides?.[rDef.id];
       ruleWeights.set(rDef.id, override?.weight ?? rDef.defaultWeight);
     }
 
-    // Calculate deductions
     for (const finding of findings) {
       const ruleWeight = ruleWeights.get(finding.ruleId) ?? 5;
       const multiplier = SEVERITY_MULTIPLIERS[finding.severity];
@@ -55,7 +53,6 @@ export class ScoringEngine {
       categoryDeductions[finding.category] += normalizedDeduction;
     }
 
-    // Apply category scores with floor limits
     const weights = tierConfig.scoring.categoryWeights ?? DEFAULT_CATEGORY_WEIGHTS;
     const floors = tierConfig.scoring.floorScores ?? DEFAULT_FLOOR_SCORES;
 
@@ -65,7 +62,24 @@ export class ScoringEngine {
       categories[cat].score = Math.max(floors[cat] ?? 0, Math.min(100, Math.round(rawScore)));
     }
 
-    // Calculate total weighted score
+    if (categories.mobile_seo) {
+      const hasMobileRules = ruleDefinitions.some(r => r.category === 'mobile_seo');
+      if (!hasMobileRules) {
+        categories.mobile_seo.score = 100;
+        categories.mobile_seo.totalDeductions = 0;
+      } else {
+        const { score: calculatedMobileScore } = calculateMobileScore(findings, pagesAudited);
+        categories.mobile_seo.score = calculatedMobileScore;
+        categories.mobile_seo.totalDeductions = Math.round((100 - calculatedMobileScore) * 10) / 10;
+      }
+    }
+
+    if (categories.security) {
+      const calculatedSecurityScore = calculateSecurityScore(findings, pagesAudited, floors);
+      categories.security.score = calculatedSecurityScore;
+      categories.security.totalDeductions = Math.round((100 - calculatedSecurityScore) * 10) / 10;
+    }
+
     let weightedSum = 0;
     let weightTotal = 0;
 

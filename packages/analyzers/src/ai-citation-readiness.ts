@@ -25,7 +25,7 @@ export class AiCitationReadinessAnalyzer {
     }
 
     // Check semantic HTML
-    const semanticHtmlGood = this.checkSemanticHtml(normalizedPage.html);
+    const semanticHtmlGood = this.checkSemanticHtml(normalizedPage.html || '');
     if (semanticHtmlGood) {
       score += 20;
       findings.push({ type: 'success', message: 'Good use of semantic HTML elements' });
@@ -44,7 +44,7 @@ export class AiCitationReadinessAnalyzer {
     }
 
     // Check clear authorship
-    const hasAuthorship = this.checkAuthorship(normalizedPage.html);
+    const hasAuthorship = this.checkAuthorship(normalizedPage.html || '');
     if (hasAuthorship) {
       score += 15;
       findings.push({ type: 'success', message: 'Clear authorship attribution present' });

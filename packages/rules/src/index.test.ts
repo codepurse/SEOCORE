@@ -430,3 +430,140 @@ describe('AI Visibility Rules', () => {
     expect(findings.some(f => f.message.includes('Heading hierarchy reduces'))).toBe(true);
   });
 });
+
+describe('Security and Caching Rules', () => {
+  it('SecurityRule should produce findings in security category', async () => {
+    const { SecurityRule } = await import('./index');
+    const rule = new SecurityRule();
+    const page: NormalizedPage = {
+      url: 'http://example.com/',
+      statusCode: 200,
+      loadTimeMs: 100,
+      contentType: 'text/html',
+      headings: { h1: [], h2: [], h3: [] },
+      links: [],
+      images: [],
+      hreflang: [],
+      structuredData: [],
+    };
+
+    const findings = await rule.evaluate(page, { allPages: {}, config: mockConfig });
+    expect(findings.length).toBeGreaterThanOrEqual(1);
+    expect(findings[0].category).toBe('security');
+    expect(findings[0].message).toContain('not served over HTTPS');
+  });
+
+  it('SecurityHeadersRule should validate CSP quality and flag unsafe-inline/eval/wildcard', async () => {
+    const { SecurityHeadersRule } = await import('./index');
+    const rule = new SecurityHeadersRule();
+    const page: NormalizedPage = {
+      url: 'https://example.com/',
+      statusCode: 200,
+      loadTimeMs: 100,
+      contentType: 'text/html',
+      headers: {
+        'content-security-policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' *; object-src *",
+        'x-frame-options': 'DENY',
+        'referrer-policy': 'no-referrer',
+        'strict-transport-security': 'max-age=31536000; includeSubDomains; preload',
+        'x-content-type-options': 'nosniff',
+        'permissions-policy': 'geolocation=(self)',
+        'cross-origin-opener-policy': 'same-origin',
+        'cross-origin-embedder-policy': 'require-corp',
+        'cross-origin-resource-policy': 'same-origin',
+      },
+      headings: { h1: [], h2: [], h3: [] },
+      links: [],
+      images: [],
+      hreflang: [],
+      structuredData: [],
+    };
+
+    const findings = await rule.evaluate(page, { allPages: {}, config: mockConfig });
+    expect(findings.some(f => f.message.includes('unsafe-inline'))).toBe(true);
+    expect(findings.some(f => f.message.includes('unsafe-eval'))).toBe(true);
+    expect(findings.some(f => f.message.includes('wildcard source'))).toBe(true);
+  });
+
+  it('SecurityHeadersRule should bypass X-Frame-Options when CSP frame-ancestors is present', async () => {
+    const { SecurityHeadersRule } = await import('./index');
+    const rule = new SecurityHeadersRule();
+    const page: NormalizedPage = {
+      url: 'https://example.com/',
+      statusCode: 200,
+      loadTimeMs: 100,
+      contentType: 'text/html',
+      headers: {
+        'content-security-policy': "default-src 'self'; frame-ancestors 'self'",
+        'strict-transport-security': 'max-age=31536000',
+        'x-content-type-options': 'nosniff',
+      },
+      headings: { h1: [], h2: [], h3: [] },
+      links: [],
+      images: [],
+      hreflang: [],
+      structuredData: [],
+    };
+
+    const findings = await rule.evaluate(page, { allPages: {}, config: mockConfig });
+    // Should NOT complain about missing X-Frame-Options
+    expect(findings.some(f => f.message.includes('X-Frame-Options'))).toBe(false);
+  });
+
+  it('SecurityHeadersRule should respect custom finding severity overrides', async () => {
+    const { SecurityHeadersRule } = await import('./index');
+    const rule = new SecurityHeadersRule();
+    const customOverrideConfig: SeoConfig = {
+      ...mockConfig,
+      ruleOverrides: {
+        'security-headers': {
+          findingSeverityOverrides: {
+            'security-headers:missing-csp': 'error',
+          },
+        },
+      },
+    };
+
+    const page: NormalizedPage = {
+      url: 'https://example.com/',
+      statusCode: 200,
+      loadTimeMs: 100,
+      contentType: 'text/html',
+      headers: {
+        'strict-transport-security': 'max-age=31536000',
+        'x-content-type-options': 'nosniff',
+      },
+      headings: { h1: [], h2: [], h3: [] },
+      links: [],
+      images: [],
+      hreflang: [],
+      structuredData: [],
+    };
+
+    const findings = await rule.evaluate(page, { allPages: {}, config: customOverrideConfig });
+    const missingCspFinding = findings.find(f => f.message.toLowerCase().includes('content-security-policy') && f.message.toLowerCase().includes('missing'));
+    expect(missingCspFinding).toBeDefined();
+    expect(missingCspFinding?.severity).toBe('error');
+  });
+
+  it('CachingHeadersRule should report missing cache headers', async () => {
+    const { CachingHeadersRule } = await import('./index');
+    const rule = new CachingHeadersRule();
+    const page: NormalizedPage = {
+      url: 'https://example.com/',
+      statusCode: 200,
+      loadTimeMs: 100,
+      contentType: 'text/html',
+      headers: {},
+      headings: { h1: [], h2: [], h3: [] },
+      links: [],
+      images: [],
+      hreflang: [],
+      structuredData: [],
+    };
+
+    const findings = await rule.evaluate(page, { allPages: {}, config: mockConfig });
+    expect(findings.some(f => f.message.includes('Cache-Control'))).toBe(true);
+    expect(findings.some(f => f.message.includes('ETag'))).toBe(true);
+  });
+});

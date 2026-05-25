@@ -30,6 +30,10 @@ async function getAvailablePort(): Promise<number> {
 // ==========================================
 
 export class LighthouseCrawler implements Crawler {
+  static async isAvailable(): Promise<boolean> {
+    try { await import('lighthouse'); return true; } catch { return false; }
+  }
+
   private readonly httpCrawler = new HttpCrawler();
   private browser: any = null;
   private port: number | null = null;
@@ -497,6 +501,10 @@ export class HttpCrawler implements Crawler {
 // ==========================================
 
 export class PlaywrightCrawler implements Crawler {
+  static async isAvailable(): Promise<boolean> {
+    try { await import('playwright'); return true; } catch { return false; }
+  }
+
   private readonly httpCrawler = new HttpCrawler();
 
   async crawl(url: string, config: SeoConfig): Promise<CrawlResult> {
@@ -623,3 +631,6 @@ export class PlaywrightCrawler implements Crawler {
     }
   }
 }
+
+export { CrawlerRegistry, type CrawlerFactory, createDefaultRegistry } from './registry.js';
+

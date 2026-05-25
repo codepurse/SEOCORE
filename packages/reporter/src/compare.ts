@@ -240,7 +240,7 @@ export class CompareEngine {
 
     // Define category groups for focus
     const categoryGroups: Record<string, Category[]> = {
-      'technical': ['performance', 'indexing', 'accessibility', 'mobile_seo'],
+      'technical': ['performance', 'indexing', 'accessibility', 'mobile_seo', 'security'],
       'content': ['metadata', 'seo', 'links'],
       'ai-visibility': ['ai_visibility'],
       'backlinks': ['backlink_intelligence'],

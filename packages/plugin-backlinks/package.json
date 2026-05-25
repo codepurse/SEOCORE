@@ -1,0 +1,16 @@
+{
+  "name": "@seocore/plugin-backlinks",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@seocore/sdk": "*",
+    "@seocore/backlinks": "*",
+    "@seocore/rules": "*"
+  }
+}

@@ -29,7 +29,7 @@ export async function runContentCommand(url: string, options: ContentCommandOpti
 
     // Run analyzers
     const contentAnalyzer = new ContentAnalyzer();
-    const contentAnalysis = contentAnalyzer.analyze(normalizedPage.html, normalizedPage);
+    const contentAnalysis = contentAnalyzer.analyze(normalizedPage.html || '', normalizedPage);
 
     const eeatAnalyzer = new EeatAnalyzer();
     const eeatAnalysis = await eeatAnalyzer.analyze(url, normalizedPage);
@@ -91,7 +91,7 @@ export async function runContentCommand(url: string, options: ContentCommandOpti
 
     return result;
   } catch (error: any) {
-    if (!isJson && !isHtml) spinner.stop('Error during analysis', false);
+    if (!isJson && !isHtml) spinner.stop('Error during analysis', 'fail');
     console.error('Error:', error.message);
     process.exit(1);
   }

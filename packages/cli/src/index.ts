@@ -145,43 +145,37 @@ program
       const engine = new SeoEngine(eventBus);
       const result = await engine.run(url, partialConfig, tier);
 
-      // Update AI Visibility score with strict, granular scoring
-    let aiVisBreakdown: any = null;
-    try {
-      const { runAiVisibility } = await import('./ai-visibility/index.js');
-      const aiVisResult = await runAiVisibility(url, { silent: true });
-      aiVisBreakdown = aiVisResult.breakdown;
-      
-      if (result.categories && result.categories.ai_visibility) {
-        result.categories.ai_visibility.score = aiVisResult.score;
-        result.categories.ai_visibility.totalDeductions = Math.round((100 - aiVisResult.score) * 10) / 10;
-        
-        // Recompute total score based on CATEGORY_WEIGHTS
-        const CATEGORY_WEIGHTS: Record<string, number> = {
-        indexing: 0.15,
-        metadata: 0.15,
-        links: 0.10,
-        seo: 0.10,
-        ai_visibility: 0.15,
-        accessibility: 0.10,
-        performance: 0.10,
-        mobile_seo: 0.15,
-        backlink_intelligence: 0.10,
-      };
-      
-        let weightedSum = 0;
-        let weightTotal = 0;
-        for (const cat of Object.keys(result.categories)) {
-          const catTyped = cat as Category;
-          const catWeight = CATEGORY_WEIGHTS[catTyped] ?? 0;
-          weightedSum += result.categories[catTyped].score * catWeight;
-          weightTotal += catWeight;
+      let aiVisBreakdown: any = null;
+      try {
+        const { runAiVisibility } = await import('./ai-visibility/index.js');
+        const aiVis = await runAiVisibility(url, { silent: true });
+        aiVisBreakdown = aiVis.breakdown;
+
+        if (aiVis && result.categories.ai_visibility) {
+          // Override category score with the granular AI-vis result
+          result.categories.ai_visibility.score = aiVis.score;
+          result.categories.ai_visibility.totalDeductions =
+            Math.round((100 - aiVis.score) * 10) / 10;
+
+          // Re-aggregate using the SAME tier weights the audit used (no duplicate constants)
+          const activeTier = tier ?? 'standard';
+          const tierConfig = TIER_PRESETS[activeTier];
+          const weights = tierConfig.scoring.categoryWeights;
+
+          let weightedSum = 0;
+          let weightTotal = 0;
+          for (const cat of Object.keys(result.categories) as Category[]) {
+            const w = weights[cat];
+            if (w !== undefined) {
+              weightedSum += result.categories[cat].score * w;
+              weightTotal += w;
+            }
+          }
+          result.score = weightTotal > 0 ? Math.round(weightedSum / weightTotal) : 100;
         }
-        result.score = weightTotal > 0 ? Math.round(weightedSum / weightTotal) : 100;
+      } catch {
+        // Fail gracefully — keep base score
       }
-    } catch {
-      // Fallback gracefully
-    }
 
       // Export JSON if requested
       if (options.format === 'json' || options.format === 'both' || options.format === 'all') {
@@ -1440,6 +1434,36 @@ program
       await captureScreenshots(url, options);
     } catch (err: any) {
       console.error(pc.red(`\nScreenshot capture failed: ${err.message}`));
+      process.exit(1);
+    }
+  });
+
+// ==========================================
+// 12. IMAGES AUDIT COMMAND
+// ==========================================
+program
+  .command('images')
+  .description('Audit website images for SEO, performance, accessibility, and caching')
+  .argument('<url>', 'Target URL (e.g. https://example.com)')
+  .option('--crawl', 'Site-wide crawl (default: single URL only)', false)
+  .option('--playwright', 'Enable Playwright for rendered size and LCP detection', false)
+  .option('--threshold-kb <number>', 'Oversized image threshold in KB (default: 200)', '200')
+  .option('-f, --format <format>', 'Output format: json, html', 'html')
+  .option('-o, --output <path>', 'Export file path')
+  .option('--concurrency <number>', 'Parallel image fetches (default: 5)', '5')
+  .option('--max-images <number>', 'Safety cap for --crawl (default: 500)', '500')
+  .option('--user-agent <string>', 'Override User-Agent for fetches')
+  .option('--timeout <ms>', 'Per-image fetch timeout in milliseconds (default: 10000)', '10000')
+  .action(async (url, options) => {
+    try {
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        console.error(pc.red('Error: Target URL must start with http:// or https://'));
+        process.exit(1);
+      }
+      const { runImagesCommand } = await import('./images/index.js');
+      await runImagesCommand(url, options);
+    } catch (err: any) {
+      console.error(pc.red(`\nImage audit failed: ${err.message}`));
       process.exit(1);
     }
   });

@@ -64,7 +64,7 @@ export const DEFAULT_FLOOR_SCORES: Record<Category, number> = {
   performance: 20,
   mobile_seo: 20,
   backlink_intelligence: 20,
-  security: 20,
+  security: 0,
 };
 
 export const TIER_PRESETS: Record<ExecutionTier, ExecutionTierConfig> = {

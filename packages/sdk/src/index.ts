@@ -1,3 +1,5 @@
+import { ExecutionTier } from './tier-config.js';
+
 // ==========================================
 // CORE MODEL SCHEMA & TYPES
 // ==========================================
@@ -163,6 +165,7 @@ export interface BacklinkIntelligenceData {
 
 export interface SeoConfig {
   preset: AuditPreset;
+  tier?: ExecutionTier;
   concurrency: number;
   maxDepth: number;
   maxPages: number;
@@ -173,7 +176,7 @@ export interface SeoConfig {
   lighthouseSampleCount?: number;
   excludePatterns: string[];
   includePatterns: string[];
-  ruleOverrides: Record<string, { enabled?: boolean; severity?: Severity; weight?: number }>;
+  ruleOverrides: Record<string, { enabled?: boolean; severity?: Severity; weight?: number; findingSeverityOverrides?: Record<string, Severity> }>;
   customRulesPath?: string;
   backlinks?: BacklinkApiConfig;
 }
@@ -247,10 +250,21 @@ export interface Rule {
   evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]>;
 }
 
+export type DataSourceStatus = 'ok' | 'error' | 'unavailable' | 'not-configured';
+export interface DataSource<T = unknown> {
+  status: DataSourceStatus;
+  data?: T;
+  error?: string;
+}
+
 export interface RuleEvaluationContext {
   allPages: Record<string, NormalizedPage>;
   config: SeoConfig;
+  dataSources: Map<string, DataSource>;
+  // Deprecated shims (keep for backward compat one release)
+  /** @deprecated use dataSources.get('backlinks') */
   backlinkData?: BacklinkIntelligenceData;
+  /** @deprecated use dataSources.get('backlinks') */
   backlinkError?: string;
 }
 
@@ -301,7 +315,10 @@ export interface PluginLifecycleHooks {
   onInit?(config: SeoConfig): Promise<void>;
   onBeforeCrawl?(url: string): Promise<string | void>; // can redirect / rewrite
   onPageCrawled?(result: CrawlResult, page: NormalizedPage): Promise<void>;
-  onBeforeAnalysis?(pages: Record<string, NormalizedPage>): Promise<void>;
+  onBeforeAnalysis?(
+    pages: Record<string, NormalizedPage>,
+    ctx: { startUrl: string; config: SeoConfig; dataSources: Map<string, DataSource> }
+  ): Promise<void>;
   onAfterAnalysis?(findings: Finding[]): Promise<Finding[] | void>; // can mutate findings
   onComplete?(result: AuditResult): Promise<void>;
 }
@@ -325,6 +342,7 @@ export interface EventMap {
   'score:calculated': { score: number; categories: Record<Category, CategoryScore> };
   'report:generated': { path?: string; format: string };
   'audit:complete': { result: AuditResult };
+  'crawler:selected': { name: string };
 }
 
 export type EventCallback<T> = (data: T) => void | Promise<void>;

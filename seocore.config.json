@@ -8,5 +8,12 @@
   "playwrightEnabled": false,
   "excludePatterns": [],
   "includePatterns": [],
-  "ruleOverrides": {}
+  "ruleOverrides": {
+    "security-headers": {
+      "severity": "warning",
+      "findingSeverityOverrides": {
+        "security-headers:missing-csp": "error"
+      }
+    }
+  }
 }

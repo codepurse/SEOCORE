@@ -1,11 +1,18 @@
 import { z } from 'zod';
-import { SeoConfig, AuditPreset, Severity, BacklinkApiConfig, ExecutionTier, TIER_PRESETS, ExecutionTierConfig } from '@seocore/sdk';
+import { SeoConfig, AuditPreset, BacklinkApiConfig, ExecutionTier, TIER_PRESETS, ExecutionTierConfig } from '@seocore/sdk';
 import * as fs from 'fs';
 import * as path from 'path';
 
 // Map old preset names to new execution tiers
 const PRESET_TO_TIER: Record<AuditPreset, ExecutionTier> = {
   quick: 'fast',
+  standard: 'standard',
+  deep: 'deep',
+  enterprise: 'enterprise',
+};
+
+const TIER_TO_PRESET: Record<ExecutionTier, AuditPreset> = {
+  fast: 'quick',
   standard: 'standard',
   deep: 'deep',
   enterprise: 'enterprise',
@@ -38,15 +45,18 @@ const BacklinkApiConfigSchema = z.object({
   logs: LogBacklinkSourceConfigSchema,
 }).optional();
 
+const SeverityEnum = z.enum(['critical', 'error', 'warning', 'info']);
+
 export const SeoConfigSchema = z.object({
   preset: z.enum(['quick', 'standard', 'deep', 'enterprise']).default('standard'),
+  tier: z.enum(['fast', 'standard', 'deep', 'enterprise']).optional(),
   concurrency: z.number().int().positive().default(3),
   maxDepth: z.number().int().nonnegative().default(3),
   maxPages: z.number().int().positive().default(100),
   rateLimitMs: z.number().int().nonnegative().default(100),
   retryCount: z.number().int().nonnegative().default(2),
   playwrightEnabled: z.boolean().default(false),
-  lighthouseEnabled: z.boolean().default(true),
+  lighthouseEnabled: z.boolean().default(false),
   lighthouseSampleCount: z.number().int().positive().optional(),
   excludePatterns: z.array(z.string()).default([]),
   includePatterns: z.array(z.string()).default([]),
@@ -54,8 +64,9 @@ export const SeoConfigSchema = z.object({
     z.string(),
     z.object({
       enabled: z.boolean().optional(),
-      severity: z.enum(['critical', 'error', 'warning', 'info']).optional(),
+      severity: SeverityEnum.optional(),
       weight: z.number().min(1).max(10).optional(),
+      findingSeverityOverrides: z.record(z.string(), SeverityEnum).optional(),
     })
   ).default({}),
   customRulesPath: z.string().optional(),
@@ -75,7 +86,7 @@ export function getTierConfig(tierOrPreset: ExecutionTier | AuditPreset): Execut
  */
 export function tierConfigToSeoConfig(tierConfig: ExecutionTierConfig, overrides: Partial<SeoConfig> = {}): SeoConfig {
   const baseConfig: Partial<SeoConfig> = {
-    preset: tierConfig.tier as unknown as AuditPreset,
+    preset: TIER_TO_PRESET[tierConfig.tier],
     concurrency: tierConfig.crawl.concurrency,
     maxDepth: tierConfig.crawl.maxDepth,
     maxPages: tierConfig.crawl.maxPages,
@@ -126,10 +137,18 @@ export function resolveConfig(partial: Partial<SeoConfig> = {}, configFile?: str
   const preset = partial.preset || fileConfig.preset || DEFAULT_CONFIG.preset;
   const presetBase = PRESET_CONFIGS[preset];
 
-  // 3. Merge: Default -> Preset Base -> File Config -> Parameter Partial -> Env Vars
+  const activeTier = partial.tier || fileConfig.tier;
+  let tierBase = {};
+  if (activeTier) {
+    const tierConfig = getTierConfig(activeTier);
+    tierBase = tierConfigToSeoConfig(tierConfig);
+  }
+
+  // 3. Merge: Default -> Preset Base -> Tier Base -> File Config -> Parameter Partial -> Env Vars
   const merged = {
     ...DEFAULT_CONFIG,
     ...presetBase,
+    ...tierBase,
     ...fileConfig,
     ...partial,
   };

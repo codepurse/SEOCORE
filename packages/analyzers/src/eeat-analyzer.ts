@@ -22,10 +22,10 @@ export class EeatAnalyzer {
     const findings: Array<{ type: 'error' | 'warning' | 'success'; message: string; pillar: keyof EeatAnalysis['pillars'] }> = [];
 
     // Experience analysis
-    const experience = this.analyzeExperience(normalizedPage.html, findings);
+    const experience = this.analyzeExperience(normalizedPage.html || '', findings);
     
     // Expertise analysis
-    const expertise = this.analyzeExpertise(normalizedPage.html, normalizedPage.structuredData, findings);
+    const expertise = this.analyzeExpertise(normalizedPage.html || '', normalizedPage.structuredData, findings);
     
     // Authoritativeness analysis
     const authoritativeness = this.analyzeAuthoritativeness(normalizedPage, backlinkData, findings);
@@ -154,7 +154,7 @@ export class EeatAnalyzer {
     }
 
     // Check for privacy policy, contact, about us links
-    const $ = cheerio.load(normalizedPage.html);
+    const $ = cheerio.load(normalizedPage.html || '');
     const importantLinks = ['privacy', 'contact', 'about', 'terms', 'disclaimer'];
     let foundCount = 0;
     

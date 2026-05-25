@@ -351,6 +351,20 @@ export class TerminalReporter {
     if (backlinkScore < 50) backlinkColor = pc.red;
     else if (backlinkScore < 90) backlinkColor = pc.yellow;
 
+    const securityScore = result.categories.security?.score ?? 100;
+    let securityColor = pc.green;
+    if (securityScore < 50) securityColor = pc.red;
+    else if (securityScore < 90) securityColor = pc.yellow;
+
+    const getSecurityGrade = (s: number): string => {
+      if (s >= 95) return 'A+';
+      if (s >= 90) return 'A';
+      if (s >= 80) return 'B';
+      if (s >= 70) return 'C';
+      if (s >= 60) return 'D';
+      return 'F';
+    };
+
     console.log(pc.bold('PRIMARY AUDIT SCORES:'));
     console.log(`  Overall SEO Score:   [ ${scoreColor(String(score).padStart(3))} / 100 ]`);
     console.log(`  Mobile SEO Score:    [ ${mobileColor(String(mobileScore).padStart(3))} / 100 ]`);
@@ -358,7 +372,8 @@ export class TerminalReporter {
     console.log(`  Indexing Score:      [ ${idxColor(String(indexingScore).padStart(3))} / 100 ]`);
     console.log(`  Accessibility Score: [ ${accColor(String(accessScore).padStart(3))} / 100 ]`);
     console.log(`  AI Visibility Score: [ ${aiColor(String(aiScore).padStart(3))} / 100 ]`);
-    console.log(`  Backlink Score:      [ ${backlinkColor(String(backlinkScore).padStart(3))} / 100 ]\n`);
+    console.log(`  Backlink Score:      [ ${backlinkColor(String(backlinkScore).padStart(3))} / 100 ]`);
+    console.log(`  Security Score:      [ ${securityColor(String(securityScore).padStart(3))} / 100 ] - Grade [ ${securityColor(getSecurityGrade(securityScore))} ]\n`);
 
     // Calculate AI sub-score breakdown
     const pagesCount = result.pagesAudited || 1;
@@ -596,6 +611,92 @@ export class TerminalReporter {
     printBacklinkBreakdownRow('Link Quality Score:', linkQualityScore, 'low-authority-backlinks');
     printBacklinkBreakdownRow('Anchor Text Health:', anchorTextHealthScore, 'anchor-text-over-optimization');
     printBacklinkBreakdownRow('Link Velocity:', linkVelocityScore, '');
+    console.log();
+
+    // Calculate Security sub-score breakdown (Phase 5)
+    const securityFindings = result.findings.filter(f => f.category === 'security');
+    const securityScale = pagesCount > 1 ? Math.log10(pagesCount + 9) : 1;
+
+    const getSubScore = (suffixesWithDeduction: Record<string, number>): number => {
+      let rawDeductionSum = 0;
+      const pagesWithFindings = new Map<string, number>();
+      
+      for (const finding of securityFindings) {
+        for (const [suffix, deduction] of Object.entries(suffixesWithDeduction)) {
+          if (finding.id.endsWith(`:${suffix}`) || finding.id.includes(`:${suffix}:`) || finding.ruleId === suffix) {
+            const currentMax = pagesWithFindings.get(finding.url) || 0;
+            pagesWithFindings.set(finding.url, Math.max(currentMax, deduction));
+          }
+        }
+      }
+      
+      for (const maxDeduction of pagesWithFindings.values()) {
+        rawDeductionSum += maxDeduction / pagesCount;
+      }
+      
+      const scaledDeduction = rawDeductionSum / securityScale;
+      return Math.max(0, Math.min(100, Math.round(100 - scaledDeduction)));
+    };
+
+    const httpsScoreBreakdown = getSubScore({ 'not-https': 100 });
+    const hstsScoreBreakdown = getSubScore({
+      'missing-hsts': 100,
+      'hsts-invalid': 60,
+      'hsts-short-max-age': 40,
+      'hsts-missing-subdomains': 30,
+      'hsts-missing-preload': 10
+    });
+    const cspScoreBreakdown = getSubScore({
+      'missing-csp': 100,
+      'csp-report-only': 30,
+      'csp-unsafe-inline-script': 50,
+      'csp-unsafe-eval-script': 40,
+      'csp-script-src-wildcard': 40,
+      'csp-object-src-wildcard': 30,
+      'csp-missing-object-src': 20,
+      'csp-missing-default-src': 20,
+      'csp-missing-frame-ancestors': 10
+    });
+    const xctoScoreBreakdown = getSubScore({
+      'missing-x-content-type-options': 100,
+      'invalid-x-content-type-options': 50
+    });
+    const xframeScoreBreakdown = getSubScore({ 'missing-x-frame-options': 100 });
+    const referrerScoreBreakdown = getSubScore({ 'missing-referrer-policy': 100 });
+    const permissionsScoreBreakdown = getSubScore({ 'missing-permissions-policy': 100 });
+    const coopCoepCorpScoreBreakdown = getSubScore({
+      'missing-coop': 35,
+      'missing-coep': 35,
+      'missing-corp': 30
+    });
+
+    const printSecurityBreakdownRow = (label: string, subScore: number, weightPct: number, suffixes: string[]) => {
+      let subColor = pc.green;
+      if (subScore < 50) subColor = pc.red;
+      else if (subScore < 90) subColor = pc.yellow;
+
+      console.log(`  • ${`${label} (${weightPct}%):`.padEnd(30)} ${subColor(pc.bold(subScore))} / 100`);
+      if (subScore < 100) {
+        const ruleFindings = securityFindings.filter(f => 
+          suffixes.some(suffix => f.id.endsWith(`:${suffix}`) || f.id.includes(`:${suffix}:`) || f.ruleId === suffix)
+        );
+        const uniqueMessages = Array.from(new Set(ruleFindings.map(f => f.message)));
+        for (const msg of uniqueMessages) {
+          const arrowColor = subScore < 50 ? pc.red : pc.yellow;
+          console.log(`    ${arrowColor('→')} ${pc.gray(msg)}`);
+        }
+      }
+    };
+
+    console.log(pc.bold(pc.cyan(`🔒 SECURITY SCORE BREAKDOWN (Grade: ${getSecurityGrade(securityScore)}):`)));
+    printSecurityBreakdownRow('HTTPS Enforced', httpsScoreBreakdown, 20, ['not-https']);
+    printSecurityBreakdownRow('HSTS Header', hstsScoreBreakdown, 20, ['missing-hsts', 'hsts-invalid', 'hsts-short-max-age', 'hsts-missing-subdomains', 'hsts-missing-preload']);
+    printSecurityBreakdownRow('CSP Quality', cspScoreBreakdown, 20, ['missing-csp', 'csp-report-only', 'csp-unsafe-inline-script', 'csp-unsafe-eval-script', 'csp-script-src-wildcard', 'csp-object-src-wildcard', 'csp-missing-object-src', 'csp-missing-default-src', 'csp-missing-frame-ancestors']);
+    printSecurityBreakdownRow('X-Content-Type-Options', xctoScoreBreakdown, 10, ['missing-x-content-type-options', 'invalid-x-content-type-options']);
+    printSecurityBreakdownRow('X-Frame-Options / CSP-FA', xframeScoreBreakdown, 10, ['missing-x-frame-options']);
+    printSecurityBreakdownRow('Referrer-Policy', referrerScoreBreakdown, 10, ['missing-referrer-policy']);
+    printSecurityBreakdownRow('Permissions-Policy', permissionsScoreBreakdown, 5, ['missing-permissions-policy']);
+    printSecurityBreakdownRow('COOP / COEP / CORP', coopCoepCorpScoreBreakdown, 5, ['missing-coop', 'missing-coep', 'missing-corp']);
     console.log();
 
     const filledBlocks = Math.round(score / 5);

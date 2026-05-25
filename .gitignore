@@ -51,3 +51,12 @@ coverage/
 # OS files
 Thumbs.db
 Desktop.ini
+
+# Debug and temp files
+.tmp/
+seocore-report.*
+debug-*
+test-audit-*.json
+test-content-report.*
+test-schema-report.*
+

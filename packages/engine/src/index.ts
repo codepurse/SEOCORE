@@ -9,16 +9,17 @@ import {
   RuleDefinition,
   ExecutionTier,
   ExecutionTierConfig,
-  TIER_PRESETS
+  TIER_PRESETS,
+  DataSource
 } from '@seocore/sdk';
 import { resolveConfig } from '@seocore/config';
-import { createBacklinkClient } from '@seocore/backlinks';
+import { DefaultPluginRegistry, loadPluginsForTier } from './plugin-registry.js';
 import PQueue from 'p-queue';
 import Bottleneck from 'bottleneck';
-import { HttpCrawler, PlaywrightCrawler, LighthouseCrawler, RobotsTxt, SitemapParser } from '@seocore/crawler';
+import { HttpCrawler, PlaywrightCrawler, LighthouseCrawler, RobotsTxt, SitemapParser, CrawlerRegistry, createDefaultRegistry } from '@seocore/crawler';
 import { PageNormalizer } from '@seocore/analyzers';
 import { RuleEngine } from '@seocore/rules';
-import { ScoringEngine } from '@seocore/scoring';
+import { ScoringEngine, CrawlGraphBuilder } from '@seocore/scoring-core';
 
 function patternToRegex(pattern: string): RegExp {
   // Escape regex special chars except '*' and '?'
@@ -43,18 +44,23 @@ export function isUrlMatch(url: string, patterns: string[]): boolean {
 
 export class SeoEngine {
   private readonly eventBus: EventBus;
-  private crawler: Crawler;
+  private readonly crawlerRegistry: CrawlerRegistry;
   private readonly ruleEngine: RuleEngine;
-  private readonly plugins: SeoPlugin[] = [];
+  private readonly pluginRegistry: DefaultPluginRegistry;
 
-  constructor(eventBus = new EventBus()) {
+  constructor(
+    eventBus = new EventBus(),
+    crawlerRegistry?: CrawlerRegistry,
+    pluginRegistry?: DefaultPluginRegistry
+  ) {
     this.eventBus = eventBus;
     this.ruleEngine = new RuleEngine();
-    this.crawler = new HttpCrawler(); // default, will switch in run() if configured
+    this.crawlerRegistry = crawlerRegistry ?? createDefaultRegistry();
+    this.pluginRegistry = pluginRegistry ?? new DefaultPluginRegistry();
   }
 
   registerPlugin(plugin: SeoPlugin): void {
-    this.plugins.push(plugin);
+    this.pluginRegistry.register(plugin);
     if (plugin.rules) {
       for (const rule of plugin.rules) {
         this.ruleEngine.registerRule(rule);
@@ -95,23 +101,17 @@ export class SeoEngine {
         playwrightEnabled: tierConfig.crawl.playwrightEnabled,
         lighthouseEnabled: tierConfig.crawl.lighthouseEnabled
       };
-    }
-
-    // Instantiate crawler based on config
-    if (config.lighthouseEnabled) {
-      this.crawler = new LighthouseCrawler();
-    } else if (config.playwrightEnabled) {
-      this.crawler = new PlaywrightCrawler();
-    } else {
-      this.crawler = new HttpCrawler();
-    }
-
-    // 1. Run lifecycle hook: onInit
-    for (const plugin of this.plugins) {
-      if (plugin.lifecycle?.onInit) {
-        await plugin.lifecycle.onInit(config);
+      const autoPlugins = await loadPluginsForTier(tierConfig);
+      for (const p of autoPlugins) {
+        this.registerPlugin(p);
       }
     }
+
+    const { name: crawlerName, crawler } = await this.crawlerRegistry.selectForConfig(config);
+    await this.eventBus.emit('crawler:selected', { name: crawlerName });
+
+    // 1. Run lifecycle hook: onInit
+    await this.pluginRegistry.runHook('onInit', config);
 
     await this.eventBus.emit('crawl:start', { startUrl, timestamp: new Date().toISOString() });
 
@@ -119,7 +119,7 @@ export class SeoEngine {
     const visited = new Set<string>();
     const queued = new Set<string>();
     const pages: Record<string, NormalizedPage> = {};
-    let lighthousePagesCrawled = 0;
+    const sampledUrls = new Set<string>();
     const httpCrawler = new HttpCrawler();
 
     let robotsTxt: RobotsTxt | null = null;
@@ -175,6 +175,12 @@ export class SeoEngine {
 
       queued.add(url);
 
+      if (config.lighthouseEnabled) {
+        if (config.lighthouseSampleCount === undefined || sampledUrls.size < config.lighthouseSampleCount) {
+          sampledUrls.add(url);
+        }
+      }
+
       pQueue.add(async () => {
         // Check robots.txt Disallow
         const urlObj = new URL(url);
@@ -184,25 +190,17 @@ export class SeoEngine {
         }
 
         // Run hook: onBeforeCrawl
-        let finalUrl = url;
-        for (const plugin of this.plugins) {
-          if (plugin.lifecycle?.onBeforeCrawl) {
-            const hookRes = await plugin.lifecycle.onBeforeCrawl(url);
-            if (hookRes) finalUrl = hookRes;
-          }
-        }
+        const finalUrl = await this.pluginRegistry.runUrlRewriteHook('onBeforeCrawl', url);
 
         try {
           let crawlResult;
-          if (config.lighthouseEnabled && config.lighthouseSampleCount !== undefined && lighthousePagesCrawled >= config.lighthouseSampleCount) {
+          const useLighthouse = sampledUrls.has(url);
+          if (config.lighthouseEnabled && !useLighthouse) {
             // We've hit the sample limit, use HTTP crawler
             crawlResult = await limiter.schedule(() => httpCrawler.crawl(finalUrl, config));
           } else {
             // Use configured crawler
-            crawlResult = await limiter.schedule(() => this.crawler.crawl(finalUrl, config));
-            if (config.lighthouseEnabled) {
-              lighthousePagesCrawled++;
-            }
+            crawlResult = await limiter.schedule(() => crawler.crawl(finalUrl, config));
           }
           visited.add(url);
 
@@ -222,11 +220,7 @@ export class SeoEngine {
 
           pages[finalUrl] = page;
 
-          for (const plugin of this.plugins) {
-            if (plugin.lifecycle?.onPageCrawled) {
-              await plugin.lifecycle.onPageCrawled(crawlResult, page);
-            }
-          }
+          await this.pluginRegistry.runHook('onPageCrawled', crawlResult, page);
 
           await this.eventBus.emit('dom:parsed', { url: finalUrl, page });
 
@@ -248,45 +242,37 @@ export class SeoEngine {
     await pQueue.onIdle();
 
     // Calculate Crawl Graph before running analysis
-    const crawlGraph = this.calculateCrawlGraph(pages, startUrl, domain, sitemapUrls);
+    const crawlGraph = CrawlGraphBuilder.build({ pages, startUrl, domain, sitemapUrls });
 
     const totalLoadTimeMs = Date.now() - startTotalTime;
 
+    const dataSources = new Map<string, DataSource>();
+
     // 2. Run lifecycle hook: onBeforeAnalysis
-    for (const plugin of this.plugins) {
-      if (plugin.lifecycle?.onBeforeAnalysis) {
-        await plugin.lifecycle.onBeforeAnalysis(pages);
-      }
-    }
+    const beforeAnalysisCtx = { startUrl, config, dataSources };
+    await this.pluginRegistry.runHook('onBeforeAnalysis', pages, beforeAnalysisCtx);
 
-    let backlinkData: BacklinkIntelligenceData | undefined;
-    let backlinkError: string | undefined;
-
-    if (config.backlinks) {
-      try {
-        const backlinkClient = createBacklinkClient(config.backlinks);
-        backlinkData = await backlinkClient.getIntelligence(startUrl, 250);
-      } catch (err: any) {
-        backlinkError = err.message;
-      }
-    }
+    const backlinksDS = dataSources.get('backlinks');
+    const backlinkData = backlinksDS?.data as BacklinkIntelligenceData | undefined;
+    const backlinkError = backlinksDS?.status === 'error' ? backlinksDS.error : undefined;
 
     // 3. Evaluate SEO rules
-    let findings = await this.ruleEngine.run(pages, config, backlinkData, backlinkError, tierConfig);
+    let findings = await this.ruleEngine.run(pages, config, dataSources, tierConfig, backlinkData, backlinkError);
 
     // 4. Run lifecycle hook: onAfterAnalysis (allowing mutations)
-    for (const plugin of this.plugins) {
-      if (plugin.lifecycle?.onAfterAnalysis) {
-        const mutated = await plugin.lifecycle.onAfterAnalysis(findings);
-        if (mutated) findings = mutated;
-      }
-    }
+    findings = await this.pluginRegistry.runMutationHook('onAfterAnalysis', findings);
 
     await this.eventBus.emit('analyzer:completed', { url: startUrl, findingsCount: findings.length });
 
     // 5. Calculate score
     const ruleDefs: RuleDefinition[] = this.ruleEngine.getRules(config, tierConfig).map((r) => r.definition);
-    const scoringResult = ScoringEngine.calculate(findings, visited.size, config, ruleDefs, tierConfig);
+    const scoringResult = ScoringEngine.calculate({
+      findings,
+      pagesAudited: visited.size,
+      config,
+      tierConfig: tierConfig ?? TIER_PRESETS.standard,
+      ruleDefinitions: ruleDefs,
+    });
 
     await this.eventBus.emit('score:calculated', {
       score: scoringResult.score,
@@ -308,171 +294,19 @@ export class SeoEngine {
     };
 
     // 6. Run lifecycle hook: onComplete
-    for (const plugin of this.plugins) {
-      if (plugin.lifecycle?.onComplete) {
-        await plugin.lifecycle.onComplete(auditResult);
-      }
-    }
+    await this.pluginRegistry.runHook('onComplete', auditResult);
 
     await this.eventBus.emit('audit:complete', { result: auditResult });
 
     // Clean up crawler resources
-    if ('close' in this.crawler && typeof this.crawler.close === 'function') {
+    if (crawler && 'close' in crawler && typeof crawler.close === 'function') {
       try {
-        await this.crawler.close();
+        await crawler.close();
       } catch (err) {
         console.warn(`[Engine] Error cleaning up crawler:`, err);
       }
     }
 
     return auditResult;
-  }
-
-  private calculateCrawlGraph(
-    pages: Record<string, NormalizedPage>,
-    startUrl: string,
-    domain: string,
-    sitemapUrls: string[]
-  ) {
-    // 1. Inject sitemap orphans
-    for (const sitemapUrl of sitemapUrls) {
-      if (!pages[sitemapUrl]) {
-        try {
-          const sitemapUrlObj = new URL(sitemapUrl);
-          if (sitemapUrlObj.origin === domain) {
-            pages[sitemapUrl] = {
-              url: sitemapUrl,
-              statusCode: 0,
-              loadTimeMs: 0,
-              contentType: 'none',
-              headings: { h1: [], h2: [], h3: [] },
-              links: [],
-              images: [],
-              hreflang: [],
-              structuredData: [],
-              isOrphan: true,
-              inDegree: 0,
-              outDegree: 0,
-              depth: 0,
-              authorityScore: 1,
-            };
-          }
-        } catch {
-          // ignore
-        }
-      }
-    }
-
-    const nodes: any[] = [];
-    const edges: any[] = [];
-    const inLinksMap: Record<string, Set<string>> = {};
-    const outLinksMap: Record<string, Set<string>> = {};
-
-    for (const url of Object.keys(pages)) {
-      inLinksMap[url] = new Set<string>();
-      outLinksMap[url] = new Set<string>();
-    }
-
-    // Populate out and in links maps and edges
-    for (const [url, page] of Object.entries(pages)) {
-      for (const link of page.links) {
-        if (link.isInternal && pages[link.url]) {
-          outLinksMap[url].add(link.url);
-          inLinksMap[link.url].add(url);
-          edges.push({
-            source: url,
-            target: link.url,
-          });
-        }
-      }
-    }
-
-    let maxDepth = 0;
-    for (const [url, page] of Object.entries(pages)) {
-      const inDegree = inLinksMap[url].size;
-      const outDegree = outLinksMap[url].size;
-
-      page.inDegree = inDegree;
-      page.outDegree = outDegree;
-      page.isOrphan = page.isOrphan || (url !== startUrl && inDegree === 0);
-
-      if (page.depth && page.depth > maxDepth) {
-        maxDepth = page.depth;
-      }
-    }
-
-    // PageRank calculation
-    const numPages = Object.keys(pages).length;
-    if (numPages > 0) {
-      let ranks: Record<string, number> = {};
-      for (const url of Object.keys(pages)) {
-        ranks[url] = 1;
-      }
-
-      const damping = 0.85;
-      const iterations = 5;
-
-      for (let iter = 0; iter < iterations; iter++) {
-        const nextRanks: Record<string, number> = {};
-        for (const url of Object.keys(pages)) {
-          nextRanks[url] = 1 - damping;
-        }
-
-        for (const url of Object.keys(pages)) {
-          const outCount = outLinksMap[url].size;
-          if (outCount > 0) {
-            const share = (ranks[url] * damping) / outCount;
-            for (const targetUrl of outLinksMap[url]) {
-              nextRanks[targetUrl] = (nextRanks[targetUrl] || 0) + share;
-            }
-          } else {
-            const share = (ranks[url] * damping) / numPages;
-            for (const targetUrl of Object.keys(pages)) {
-              nextRanks[targetUrl] = (nextRanks[targetUrl] || 0) + share;
-            }
-          }
-        }
-        ranks = nextRanks;
-      }
-
-      const prValues = Object.values(ranks);
-      const maxPR = Math.max(...prValues, 1e-4);
-      for (const [url, page] of Object.entries(pages)) {
-        page.authorityScore = Math.round(1 + 99 * (ranks[url] / maxPR));
-      }
-    }
-
-    for (const [url, page] of Object.entries(pages)) {
-      nodes.push({
-        url,
-        depth: page.depth || 0,
-        isOrphan: !!page.isOrphan,
-        inDegree: page.inDegree || 0,
-        outDegree: page.outDegree || 0,
-        authorityScore: page.authorityScore || 1,
-      });
-    }
-
-    const orphanCount = nodes.filter((n) => n.isOrphan).length;
-    const hubPages = nodes
-      .map((n) => ({ url: n.url, outDegree: n.outDegree }))
-      .sort((a, b) => b.outDegree - a.outDegree)
-      .slice(0, 5);
-
-    const authorityNodes = nodes
-      .map((n) => ({ url: n.url, inDegree: n.inDegree }))
-      .sort((a, b) => b.inDegree - a.inDegree)
-      .slice(0, 5);
-
-    return {
-      nodes,
-      edges,
-      metrics: {
-        maxDepth,
-        orphanCount,
-        hubPages,
-        authorityNodes,
-      },
-    };
   }
 }

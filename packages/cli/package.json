@@ -21,6 +21,7 @@
     "commander": "^12.1.0",
     "inquirer": "^13.4.3",
     "node-fetch": "^3.3.2",
+    "sharp": "^0.33.5",
     "axios": "^1.7.2",
     "picocolors": "^1.0.1"
   },

@@ -1,4 +1,4 @@
-import { Rule, RuleDefinition, RuleEvaluationContext, Finding, NormalizedPage, SeoConfig, ExecutionTierConfig, Category, Severity } from '@seocore/sdk';
+import { Rule, RuleDefinition, RuleEvaluationContext, Finding, NormalizedPage, SeoConfig, ExecutionTierConfig, Category, Severity, DataSource } from '@seocore/sdk';
 import * as cheerio from 'cheerio';
 
 // Helper to create a deterministic Finding ID
@@ -23,10 +23,11 @@ export function getRuleSettings(def: RuleDefinition, config: SeoConfig) {
   const enabled = override?.enabled !== false; // default to true
   const severity = override?.severity || def.defaultSeverity;
   const weight = override?.weight ?? def.defaultWeight;
-  return { enabled, severity, weight };
+  const findingSeverityOverrides = override?.findingSeverityOverrides || {};
+  return { enabled, severity, weight, findingSeverityOverrides };
 }
 
-function hasConfiguredBacklinkSources(config: SeoConfig): boolean {
+export function hasConfiguredBacklinkSources(config: SeoConfig): boolean {
   const backlinks = config.backlinks;
   if (!backlinks?.provider) return false;
 
@@ -37,7 +38,7 @@ function hasConfiguredBacklinkSources(config: SeoConfig): boolean {
   return hasBing || hasGsc || hasLogs;
 }
 
-function getPrimaryBacklinkPage(page: NormalizedPage, context: RuleEvaluationContext): boolean {
+export function getPrimaryBacklinkPage(page: NormalizedPage, context: RuleEvaluationContext): boolean {
   const allPageUrls = Object.keys(context.allPages);
   return page.url === allPageUrls[0];
 }
@@ -1947,259 +1948,6 @@ export class MobileIndexingReadinessRule implements Rule {
   }
 }
 
-// 28. Backlink Intelligence: Missing External Backlink Data Rule
-export class MissingBacklinkDataRule implements Rule {
-  definition: RuleDefinition = {
-    id: 'missing-backlink-data',
-    name: 'Missing Backlink Intelligence Data',
-    description: 'Alerts when external backlink data sources are not configured, falling back to mock analysis mode.',
-    category: 'backlink_intelligence',
-    defaultSeverity: 'info',
-    defaultWeight: 2,
-    documentationLink: 'https://seocore.dev/docs/rules/missing-backlink-data',
-  };
-
-  async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
-    const { enabled, severity } = getRuleSettings(this.definition, context.config);
-    if (!enabled) return [];
-
-    if (!getPrimaryBacklinkPage(page, context)) {
-      return [];
-    }
-
-    if ((context.backlinkData?.sources.length ?? 0) > 0) {
-      return [];
-    }
-
-    if (context.backlinkError) {
-      return [
-        {
-          id: createFindingId(this.definition.id, page.url, 'source-error'),
-          ruleId: this.definition.id,
-          severity,
-          category: this.definition.category,
-          url: page.url,
-          message: 'Backlink intelligence source configured, but audit could not load data.',
-          recommendation: 'Check Bing credentials, verified site URL, GSC export path, and log file paths. Then rerun audit.',
-          evidence: context.backlinkError,
-          documentationLink: this.definition.documentationLink,
-        }
-      ];
-    }
-
-    if (hasConfiguredBacklinkSources(context.config)) {
-      return [];
-    }
-
-    return [
-      {
-        id: createFindingId(this.definition.id, page.url),
-        ruleId: this.definition.id,
-        severity,
-        category: this.definition.category,
-        url: page.url,
-        message: 'Backlink intelligence running without configured Bing, GSC export, or access-log sources.',
-        recommendation: 'Configure Bing Webmaster data, import a GSC links export, or point SEOCORE at access logs for first-party backlink coverage.',
-        evidence: 'No backlink source configured.',
-        documentationLink: this.definition.documentationLink,
-      }
-    ];
-  }
-}
-
-// 29. Backlink Intelligence: Anchor Text Over-Optimization Rule
-export class AnchorTextOverOptimizationRule implements Rule {
-  definition: RuleDefinition = {
-    id: 'anchor-text-over-optimization',
-    name: 'Potential Anchor Text Over-Optimization',
-    description: 'Evaluates anchor text distribution and alerts on potential over-optimization patterns.',
-    category: 'backlink_intelligence',
-    defaultSeverity: 'warning',
-    defaultWeight: 5,
-    documentationLink: 'https://seocore.dev/docs/rules/anchor-text-over-optimization',
-  };
-
-  async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
-    const { enabled, severity } = getRuleSettings(this.definition, context.config);
-    if (!enabled) return [];
-
-    if (!getPrimaryBacklinkPage(page, context)) {
-      return [];
-    }
-
-    const findings: Finding[] = [];
-    const anchorTextCounts: Record<string, number> = {};
-
-    if ((context.backlinkData?.backlinks.length ?? 0) > 0) {
-      for (const backlink of context.backlinkData!.backlinks) {
-        const anchor = backlink.anchorText.toLowerCase().trim();
-        if (anchor.length === 0) continue;
-        anchorTextCounts[anchor] = (anchorTextCounts[anchor] || 0) + 1;
-      }
-    } else {
-      const internalLinks = page.links.filter(link => link.isInternal);
-      internalLinks.forEach(link => {
-        const anchor = link.text.toLowerCase().trim();
-        if (anchor.length > 0) {
-          anchorTextCounts[anchor] = (anchorTextCounts[anchor] || 0) + 1;
-        }
-      });
-    }
-
-    const totalAnchors = Object.values(anchorTextCounts).reduce((sum, count) => sum + count, 0);
-    const overusedAnchors = Object.entries(anchorTextCounts)
-      .filter(([_, count]) => count >= 4 || (totalAnchors > 0 && count / totalAnchors >= 0.5));
-
-    if (overusedAnchors.length > 0) {
-      const usingExternalData = (context.backlinkData?.backlinks.length ?? 0) > 0;
-      findings.push({
-        id: createFindingId(this.definition.id, page.url),
-        ruleId: this.definition.id,
-        severity,
-        category: this.definition.category,
-        url: page.url,
-        message: `${usingExternalData ? 'Backlink' : 'Internal'} anchor text shows potential overuse of ${overusedAnchors.length} phrases.`,
-        recommendation: 'Diversify your anchor text distribution to avoid appearing manipulative. Use natural, branded, and partial-match anchors.',
-        evidence: `Overused anchors (${usingExternalData ? 'backlinks' : 'internal links'}): ${overusedAnchors.slice(0, 3).map(([text, count]) => `"${text}" (${count}x)`).join(', ')}`,
-        documentationLink: this.definition.documentationLink,
-      });
-    }
-
-    return findings;
-  }
-}
-
-// 30. Backlink Intelligence: Low Authority Backlinks Risk
-export class LowAuthorityBacklinksRule implements Rule {
-  definition: RuleDefinition = {
-    id: 'low-authority-backlinks',
-    name: 'Potential Low-Quality/Spammy Backlink Risk',
-    description: 'Alerts to potential low-quality or toxic backlink risks.',
-    category: 'backlink_intelligence',
-    defaultSeverity: 'warning',
-    defaultWeight: 4,
-    documentationLink: 'https://seocore.dev/docs/rules/low-authority-backlinks',
-  };
-
-  async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
-    const { enabled, severity } = getRuleSettings(this.definition, context.config);
-    if (!enabled) return [];
-
-    if (!getPrimaryBacklinkPage(page, context)) {
-      return [];
-    }
-
-    const findings: Finding[] = [];
-    const backlinks = context.backlinkData?.backlinks ?? [];
-    const metricsAvailable = context.backlinkData?.domainMetrics.authorityMetricsAvailable ?? false;
-
-    if (backlinks.length === 0) {
-      findings.push({
-        id: createFindingId(this.definition.id, page.url),
-        ruleId: this.definition.id,
-        severity: 'info',
-        category: this.definition.category,
-        url: page.url,
-        message: 'Backlink quality analysis has no loaded backlink records for this audit.',
-        recommendation: 'Load Bing, GSC export, or access-log backlink data to evaluate source quality and link risk.',
-        evidence: context.backlinkError ?? 'No backlink records loaded.',
-        documentationLink: this.definition.documentationLink,
-      });
-      return findings;
-    }
-
-    if (!metricsAvailable) {
-      findings.push({
-        id: createFindingId(this.definition.id, page.url, 'limited-metrics'),
-        ruleId: this.definition.id,
-        severity: 'info',
-        category: this.definition.category,
-        url: page.url,
-        message: 'Backlink source quality metrics are limited for current first-party sources.',
-        recommendation: 'Use anchor distribution, referring-domain diversity, and manual spot checks for quality review. Authority scoring requires source-level quality metrics.',
-        evidence: `Loaded ${backlinks.length} backlinks from ${context.backlinkData?.sources.join(', ')} without authority or spam metrics.`,
-        documentationLink: this.definition.documentationLink,
-      });
-      return findings;
-    }
-
-    const riskyBacklinks = backlinks.filter(backlink => {
-      const domainAuthority = backlink.domainAuthority ?? 100;
-      const spamScore = backlink.spamScore ?? 0;
-      return domainAuthority <= 15 || spamScore >= 50;
-    });
-
-    if (riskyBacklinks.length >= 3 || riskyBacklinks.length / backlinks.length >= 0.35) {
-      findings.push({
-        id: createFindingId(this.definition.id, page.url, 'risky-profile'),
-        ruleId: this.definition.id,
-        severity,
-        category: this.definition.category,
-        url: page.url,
-        message: `${riskyBacklinks.length} backlinks show potentially low-authority or spam-heavy signals.`,
-        recommendation: 'Review suspicious referring domains, audit anchor intent, and disavow only when manual review confirms manipulative link patterns.',
-        evidence: riskyBacklinks
-          .slice(0, 3)
-          .map(backlink => `${backlink.sourceUrl} (DA ${backlink.domainAuthority ?? 'n/a'}, Spam ${backlink.spamScore ?? 'n/a'})`)
-          .join(', '),
-        documentationLink: this.definition.documentationLink,
-      });
-    }
-
-    return findings;
-  }
-}
-
-// 31. Backlink Intelligence: Missing High-Authority Backlinks
-export class MissingHighAuthorityBacklinksRule implements Rule {
-  definition: RuleDefinition = {
-    id: 'missing-high-authority-backlinks',
-    name: 'Missing High-Authority Backlinks',
-    description: 'Alerts when the site has very few or no backlinks from high-authority domains.',
-    category: 'backlink_intelligence',
-    defaultSeverity: 'warning',
-    defaultWeight: 4,
-    documentationLink: 'https://seocore.dev/docs/rules/missing-high-authority-backlinks',
-  };
-
-  async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
-    const { enabled, severity } = getRuleSettings(this.definition, context.config);
-    if (!enabled) return [];
-
-    if (!getPrimaryBacklinkPage(page, context)) {
-      return [];
-    }
-
-    const backlinkData = context.backlinkData;
-    if (!backlinkData || backlinkData.backlinks.length === 0) {
-      return [];
-    }
-
-    if (!backlinkData.domainMetrics.authorityMetricsAvailable) {
-      return [];
-    }
-
-    const highAuthorityCount = backlinkData.backlinks.filter(backlink => (backlink.domainAuthority ?? 0) >= 60).length;
-    if (highAuthorityCount >= 3) {
-      return [];
-    }
-
-    return [
-      {
-        id: createFindingId(this.definition.id, page.url),
-        ruleId: this.definition.id,
-        severity,
-        category: this.definition.category,
-        url: page.url,
-        message: 'Very few backlinks come from high-authority referring domains.',
-        recommendation: 'Prioritize digital PR, expert citations, and partnerships that attract links from trusted industry publications and institutions.',
-        evidence: `High-authority backlinks detected: ${highAuthorityCount}.`,
-        documentationLink: this.definition.documentationLink,
-      }
-    ];
-  }
-}
-
 // 32. OpenGraph/Twitter Card Validation Rule
 export class SocialMetaRule implements Rule {
   definition: RuleDefinition = {
@@ -2395,7 +2143,7 @@ export class SecurityRule implements Rule {
     id: 'security',
     name: 'Security & HTTPS Validation',
     description: 'Checks for HTTPS, mixed content, HSTS, and insecure forms.',
-    category: 'seo',
+    category: 'security',
     defaultSeverity: 'error',
     defaultWeight: 8,
     documentationLink: 'https://seocore.dev/docs/rules/security',
@@ -2454,20 +2202,46 @@ export class SecurityRule implements Rule {
         });
       }
 
-      // Check for HSTS
-      const hasHsts = $('meta[http-equiv="Strict-Transport-Security"]').length > 0;
-      if (!hasHsts && page.url.startsWith('https:')) {
-        findings.push({
-          id: createFindingId(this.definition.id, page.url, 'missing-hsts'),
-          ruleId: this.definition.id,
-          severity: 'warning',
-          category: this.definition.category,
-          url: page.url,
-          message: 'Page is missing HSTS (HTTP Strict Transport Security) header or meta tag.',
-          recommendation: 'Add an HSTS header to enforce HTTPS connections.',
-          documentationLink: this.definition.documentationLink,
-        });
+      // Mixed content check finished
+
+      // Check Subresource Integrity (SRI) (Phase 6.3)
+      let pageOrigin = '';
+      try {
+        pageOrigin = new URL(page.url).origin;
+      } catch {
+        // fallback
       }
+
+      const checkSri = (selector: string, attr: string) => {
+        $(selector).each((_, el) => {
+          const src = $(el).attr(attr);
+          if (src && (src.startsWith('http://') || src.startsWith('https://'))) {
+            try {
+              const srcOrigin = new URL(src).origin;
+              if (srcOrigin !== pageOrigin) {
+                const integrity = $(el).attr('integrity');
+                if (!integrity) {
+                  findings.push({
+                    id: createFindingId(this.definition.id, page.url, 'missing-sri'),
+                    ruleId: this.definition.id,
+                    severity: 'warning',
+                    category: this.definition.category,
+                    url: page.url,
+                    message: `Cross-origin resource "${src}" is missing Subresource Integrity (SRI) attribute.`,
+                    recommendation: 'Add the "integrity" attribute with a cryptographic hash (SHA-256/384/512) to verify cross-origin scripts or stylesheets.',
+                    documentationLink: this.definition.documentationLink,
+                  });
+                }
+              }
+            } catch {
+              // ignore invalid url
+            }
+          }
+        });
+      };
+
+      checkSri('script[src]', 'src');
+      checkSri('link[rel="stylesheet"][href]', 'href');
 
       // Check for insecure forms
       $('form[action^="http:"]').each((_, el) => {
@@ -2627,7 +2401,7 @@ export class SecurityHeadersRule implements Rule {
   definition: RuleDefinition = {
     id: 'security-headers',
     name: 'Security Headers Assessment',
-    description: 'Checks for essential security headers like CSP, X-Frame-Options, Referrer-Policy, Cache-Control, and ETag.',
+    description: 'Checks for essential security headers like CSP, X-Frame-Options, Referrer-Policy, HSTS, and Permissions-Policy.',
     category: 'security',
     defaultSeverity: 'warning',
     defaultWeight: 6,
@@ -2635,33 +2409,194 @@ export class SecurityHeadersRule implements Rule {
   };
 
   async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
-    const { enabled, severity } = getRuleSettings(this.definition, context.config);
+    const { enabled, severity, findingSeverityOverrides } = getRuleSettings(this.definition, context.config);
     if (!enabled) return [];
 
     const findings: Finding[] = [];
     const headers = page.headers || {};
-    const headerKeys = Object.keys(headers).map(k => k.toLowerCase());
+    const normalizedHeaders: Record<string, string> = {};
+    for (const [key, val] of Object.entries(headers)) {
+      normalizedHeaders[key.toLowerCase()] = val;
+    }
+    const headerKeys = Object.keys(normalizedHeaders);
 
-    // Check for Content-Security-Policy
-    if (!headerKeys.includes('content-security-policy')) {
+    const getSeverity = (suffix: string, checkDefaultSev: Severity): Severity => {
+      const key1 = `${this.definition.id}:${suffix}`;
+      const key2 = suffix;
+      if (findingSeverityOverrides[key1]) return findingSeverityOverrides[key1];
+      if (findingSeverityOverrides[key2]) return findingSeverityOverrides[key2];
+      
+      const override = context.config.ruleOverrides?.[this.definition.id];
+      if (override?.severity) {
+        return override.severity;
+      }
+      return checkDefaultSev;
+    };
+
+    // CSP Parser helper
+    const parseCsp = (cspValue: string): Record<string, string[]> => {
+      const directives: Record<string, string[]> = {};
+      const parts = cspValue.split(';');
+      for (const part of parts) {
+        const trimmed = part.trim();
+        if (!trimmed) continue;
+        const tokens = trimmed.split(/\s+/);
+        const name = tokens[0].toLowerCase();
+        const values = tokens.slice(1);
+        directives[name] = values;
+      }
+      return directives;
+    };
+
+    // Check for Content-Security-Policy / Report-Only
+    const cspValue = normalizedHeaders['content-security-policy'];
+    const cspReportOnlyValue = normalizedHeaders['content-security-policy-report-only'];
+    const activeCspValue = cspValue || cspReportOnlyValue;
+
+    if (!cspValue && !cspReportOnlyValue) {
       findings.push({
         id: createFindingId(this.definition.id, page.url, 'missing-csp'),
         ruleId: this.definition.id,
-        severity: 'warning',
+        severity: getSeverity('missing-csp', 'warning'),
         category: this.definition.category,
         url: page.url,
         message: 'Page is missing Content-Security-Policy (CSP) header.',
         recommendation: 'Add a CSP header to mitigate XSS and other code injection attacks.',
         documentationLink: this.definition.documentationLink,
       });
+    } else if (!cspValue && cspReportOnlyValue) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'csp-report-only'),
+        ruleId: this.definition.id,
+        severity: getSeverity('csp-report-only', 'info'),
+        category: this.definition.category,
+        url: page.url,
+        message: 'CSP is in report-only mode; enforce when ready.',
+        recommendation: 'Review your Content-Security-Policy-Report-Only violations and migrate to an enforced Content-Security-Policy header.',
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    let hasFrameAncestors = false;
+
+    if (activeCspValue) {
+      const cspDirectives = parseCsp(activeCspValue);
+
+      const hasToken = (directive: string, token: string) => {
+        const vals = cspDirectives[directive];
+        return vals ? vals.map(v => v.replace(/['"]/g, '').toLowerCase()).includes(token) : false;
+      };
+
+      const hasWildcard = (directive: string) => {
+        const vals = cspDirectives[directive];
+        return vals ? vals.includes('*') : false;
+      };
+
+      // script-src checks
+      if (cspDirectives['script-src']) {
+        if (hasToken('script-src', 'unsafe-inline')) {
+          findings.push({
+            id: createFindingId(this.definition.id, page.url, 'csp-unsafe-inline-script'),
+            ruleId: this.definition.id,
+            severity: getSeverity('csp-unsafe-inline-script', 'error'),
+            category: this.definition.category,
+            url: page.url,
+            message: 'Content-Security-Policy allows "unsafe-inline" in script-src.',
+            recommendation: 'Remove "unsafe-inline" from script-src and use nonces or hashes to authorize inline scripts.',
+            documentationLink: this.definition.documentationLink,
+          });
+        }
+        if (hasToken('script-src', 'unsafe-eval')) {
+          findings.push({
+            id: createFindingId(this.definition.id, page.url, 'csp-unsafe-eval-script'),
+            ruleId: this.definition.id,
+            severity: getSeverity('csp-unsafe-eval-script', 'error'),
+            category: this.definition.category,
+            url: page.url,
+            message: 'Content-Security-Policy allows "unsafe-eval" in script-src.',
+            recommendation: 'Remove "unsafe-eval" from script-src to prevent dynamic code execution.',
+            documentationLink: this.definition.documentationLink,
+          });
+        }
+        if (hasWildcard('script-src')) {
+          findings.push({
+            id: createFindingId(this.definition.id, page.url, 'csp-script-src-wildcard'),
+            ruleId: this.definition.id,
+            severity: getSeverity('csp-script-src-wildcard', 'error'),
+            category: this.definition.category,
+            url: page.url,
+            message: 'Content-Security-Policy script-src allows wildcard source (*).',
+            recommendation: 'Specify exact allowed domains in script-src instead of wildcard (*).',
+            documentationLink: this.definition.documentationLink,
+          });
+        }
+      }
+
+      // object-src checks
+      if (cspDirectives['object-src']) {
+        if (hasWildcard('object-src')) {
+          findings.push({
+            id: createFindingId(this.definition.id, page.url, 'csp-object-src-wildcard'),
+            ruleId: this.definition.id,
+            severity: getSeverity('csp-object-src-wildcard', 'error'),
+            category: this.definition.category,
+            url: page.url,
+            message: 'Content-Security-Policy object-src allows wildcard source (*).',
+            recommendation: 'Set object-src to "none" to disable plugins like Flash and Java.',
+            documentationLink: this.definition.documentationLink,
+          });
+        }
+      } else {
+        findings.push({
+          id: createFindingId(this.definition.id, page.url, 'csp-missing-object-src'),
+          ruleId: this.definition.id,
+          severity: getSeverity('csp-missing-object-src', 'warning'),
+          category: this.definition.category,
+          url: page.url,
+          message: 'Content-Security-Policy is missing object-src directive.',
+          recommendation: 'Add `object-src \'none\'` to disable obsolete and insecure browser plugins.',
+          documentationLink: this.definition.documentationLink,
+        });
+      }
+
+      // check missing default-src
+      if (!cspDirectives['default-src']) {
+        findings.push({
+          id: createFindingId(this.definition.id, page.url, 'csp-missing-default-src'),
+          ruleId: this.definition.id,
+          severity: getSeverity('csp-missing-default-src', 'warning'),
+          category: this.definition.category,
+          url: page.url,
+          message: 'Content-Security-Policy is missing default-src directive.',
+          recommendation: 'Add `default-src \'self\'` as a fallback directive for all resource types.',
+          documentationLink: this.definition.documentationLink,
+        });
+      }
+
+      // check frame-ancestors
+      if (cspDirectives['frame-ancestors']) {
+        hasFrameAncestors = true;
+      } else {
+        findings.push({
+          id: createFindingId(this.definition.id, page.url, 'csp-missing-frame-ancestors'),
+          ruleId: this.definition.id,
+          severity: getSeverity('csp-missing-frame-ancestors', 'info'),
+          category: this.definition.category,
+          url: page.url,
+          message: 'Content-Security-Policy is missing frame-ancestors directive.',
+          recommendation: 'Add `frame-ancestors` directive as a modern way to control where your site can be embedded.',
+          documentationLink: this.definition.documentationLink,
+        });
+      }
     }
 
     // Check for X-Frame-Options
-    if (!headerKeys.includes('x-frame-options')) {
+    const hasXFrameOptions = normalizedHeaders['x-frame-options'];
+    if (!hasXFrameOptions && !hasFrameAncestors) {
       findings.push({
         id: createFindingId(this.definition.id, page.url, 'missing-x-frame-options'),
         ruleId: this.definition.id,
-        severity: 'warning',
+        severity: getSeverity('missing-x-frame-options', 'warning'),
         category: this.definition.category,
         url: page.url,
         message: 'Page is missing X-Frame-Options header.',
@@ -2675,7 +2610,7 @@ export class SecurityHeadersRule implements Rule {
       findings.push({
         id: createFindingId(this.definition.id, page.url, 'missing-referrer-policy'),
         ruleId: this.definition.id,
-        severity: 'info',
+        severity: getSeverity('missing-referrer-policy', 'info'),
         category: this.definition.category,
         url: page.url,
         message: 'Page is missing Referrer-Policy header.',
@@ -2684,12 +2619,290 @@ export class SecurityHeadersRule implements Rule {
       });
     }
 
+    // Check for HTTP Strict Transport Security (HSTS)
+    const isHttps = page.url.startsWith('https:');
+    const hstsHeader = normalizedHeaders['strict-transport-security'];
+
+    if (isHttps) {
+      if (!hstsHeader) {
+        findings.push({
+          id: createFindingId(this.definition.id, page.url, 'missing-hsts'),
+          ruleId: this.definition.id,
+          severity: getSeverity('missing-hsts', 'error'),
+          category: this.definition.category,
+          url: page.url,
+          message: 'Page is missing HTTP Strict Transport Security (HSTS) header.',
+          recommendation: 'Add the Strict-Transport-Security header to force clients to use HTTPS.',
+          documentationLink: this.definition.documentationLink,
+        });
+      } else {
+        const directives = hstsHeader.split(';').map(d => d.trim().toLowerCase());
+        let maxAge: number | null = null;
+        const maxAgeDir = directives.find(d => d.startsWith('max-age='));
+        if (maxAgeDir) {
+          const match = maxAgeDir.match(/max-age=(\d+)/);
+          if (match) {
+            maxAge = parseInt(match[1], 10);
+          }
+        }
+
+        if (maxAge === null) {
+          findings.push({
+            id: createFindingId(this.definition.id, page.url, 'hsts-invalid'),
+            ruleId: this.definition.id,
+            severity: getSeverity('hsts-invalid', 'warning'),
+            category: this.definition.category,
+            url: page.url,
+            message: 'HSTS header is missing a valid max-age directive.',
+            recommendation: 'Configure Strict-Transport-Security with a valid max-age directive (e.g., max-age=31536000).',
+            documentationLink: this.definition.documentationLink,
+          });
+        } else if (maxAge < 31536000) {
+          findings.push({
+            id: createFindingId(this.definition.id, page.url, 'hsts-short-max-age'),
+            ruleId: this.definition.id,
+            severity: getSeverity('hsts-short-max-age', 'warning'),
+            category: this.definition.category,
+            url: page.url,
+            message: `HSTS max-age is less than 1 year (${maxAge} seconds).`,
+            recommendation: 'Increase Strict-Transport-Security max-age to at least 1 year (31536000 seconds).',
+            documentationLink: this.definition.documentationLink,
+          });
+        }
+
+        const hasSubdomains = directives.some(d => d === 'includesubdomains');
+        if (!hasSubdomains) {
+          findings.push({
+            id: createFindingId(this.definition.id, page.url, 'hsts-missing-subdomains'),
+            ruleId: this.definition.id,
+            severity: getSeverity('hsts-missing-subdomains', 'warning'),
+            category: this.definition.category,
+            url: page.url,
+            message: 'HSTS header is missing the includeSubDomains directive.',
+            recommendation: 'Add includeSubDomains to your Strict-Transport-Security header to protect all subdomains.',
+            documentationLink: this.definition.documentationLink,
+          });
+        }
+
+        const hasPreload = directives.some(d => d === 'preload');
+        if (!hasPreload) {
+          findings.push({
+            id: createFindingId(this.definition.id, page.url, 'hsts-missing-preload'),
+            ruleId: this.definition.id,
+            severity: getSeverity('hsts-missing-preload', 'info'),
+            category: this.definition.category,
+            url: page.url,
+            message: 'HSTS header is missing the preload directive.',
+            recommendation: 'Add preload to your Strict-Transport-Security header to allow preloading in modern browsers.',
+            documentationLink: this.definition.documentationLink,
+          });
+        }
+      }
+    }
+
+    // Check for X-Content-Type-Options
+    const xctoHeader = normalizedHeaders['x-content-type-options'];
+    if (!xctoHeader) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'missing-x-content-type-options'),
+        ruleId: this.definition.id,
+        severity: getSeverity('missing-x-content-type-options', 'warning'),
+        category: this.definition.category,
+        url: page.url,
+        message: 'Page is missing X-Content-Type-Options header.',
+        recommendation: 'Add `X-Content-Type-Options: nosniff` to prevent MIME sniffing attacks.',
+        documentationLink: this.definition.documentationLink,
+      });
+    } else if (xctoHeader.trim().toLowerCase() !== 'nosniff') {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'invalid-x-content-type-options'),
+        ruleId: this.definition.id,
+        severity: getSeverity('invalid-x-content-type-options', 'warning'),
+        category: this.definition.category,
+        url: page.url,
+        message: `X-Content-Type-Options has invalid value: "${xctoHeader}".`,
+        recommendation: 'Set `X-Content-Type-Options: nosniff` to prevent MIME sniffing attacks.',
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    // Check for Permissions-Policy
+    const permPolicyHeader = normalizedHeaders['permissions-policy'];
+    if (!permPolicyHeader) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'missing-permissions-policy'),
+        ruleId: this.definition.id,
+        severity: getSeverity('missing-permissions-policy', 'info'),
+        category: this.definition.category,
+        url: page.url,
+        message: 'Page is missing Permissions-Policy header.',
+        recommendation: 'Add `Permissions-Policy` header to control browser feature access (camera, microphone, geolocation, etc.).',
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    // Check for COOP/COEP/CORP
+    const coopHeader = normalizedHeaders['cross-origin-opener-policy'];
+    if (!coopHeader) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'missing-coop'),
+        ruleId: this.definition.id,
+        severity: getSeverity('missing-coop', 'info'),
+        category: this.definition.category,
+        url: page.url,
+        message: 'Page is missing Cross-Origin-Opener-Policy (COOP) header.',
+        recommendation: 'Add `Cross-Origin-Opener-Policy: same-origin` to isolate your execution context.',
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    const coepHeader = normalizedHeaders['cross-origin-embedder-policy'];
+    if (!coepHeader) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'missing-coep'),
+        ruleId: this.definition.id,
+        severity: getSeverity('missing-coep', 'info'),
+        category: this.definition.category,
+        url: page.url,
+        message: 'Page is missing Cross-Origin-Embedder-Policy (COEP) header.',
+        recommendation: 'Add `Cross-Origin-Embedder-Policy: require-corp` to prevent loading resources without explicit permission.',
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    const corpHeader = normalizedHeaders['cross-origin-resource-policy'];
+    if (!corpHeader) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'missing-corp'),
+        ruleId: this.definition.id,
+        severity: getSeverity('missing-corp', 'info'),
+        category: this.definition.category,
+        url: page.url,
+        message: 'Page is missing Cross-Origin-Resource-Policy (CORP) header.',
+        recommendation: 'Add `Cross-Origin-Resource-Policy: same-origin` or `same-site` to control which origins can load your resources.',
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    // Check for Server header version disclosure (Phase 6.1)
+    const serverHeader = normalizedHeaders['server'];
+    if (serverHeader) {
+      if (/\d/.test(serverHeader)) {
+        findings.push({
+          id: createFindingId(this.definition.id, page.url, 'server-version-disclosure'),
+          ruleId: this.definition.id,
+          severity: getSeverity('server-version-disclosure', 'info'),
+          category: this.definition.category,
+          url: page.url,
+          message: `Server header exposes software version: "${serverHeader}".`,
+          recommendation: 'Configure your web server to hide specific software versions from the Server header.',
+          documentationLink: this.definition.documentationLink,
+        });
+      }
+    }
+
+    // Check for X-Powered-By (Phase 6.1)
+    const xPoweredByHeader = normalizedHeaders['x-powered-by'];
+    if (xPoweredByHeader) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'x-powered-by-disclosure'),
+        ruleId: this.definition.id,
+        severity: getSeverity('x-powered-by-disclosure', 'info'),
+        category: this.definition.category,
+        url: page.url,
+        message: `X-Powered-By header is present: "${xPoweredByHeader}".`,
+        recommendation: 'Remove the X-Powered-By header to prevent technology stack disclosure.',
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    // Check for Cookie security flags (Phase 6.2)
+    const setCookieHeader = headers['set-cookie'];
+    if (setCookieHeader) {
+      const cookieStrings = Array.isArray(setCookieHeader) 
+        ? setCookieHeader 
+        : (typeof setCookieHeader === 'string' ? [setCookieHeader] : []);
+
+      for (const cookieStr of cookieStrings) {
+        const parts = cookieStr.split(';').map((p: string) => p.trim());
+        const namePart = parts[0] || '';
+        const cookieName = namePart.split('=')[0] || 'Unknown';
+
+        const isCookieSecure = parts.some((p: string) => p.toLowerCase() === 'secure');
+        const isCookieHttpOnly = parts.some((p: string) => p.toLowerCase() === 'httponly');
+        const hasSameSite = parts.some((p: string) => p.toLowerCase().startsWith('samesite='));
+
+        if (isHttps && !isCookieSecure) {
+          findings.push({
+            id: createFindingId(this.definition.id, page.url, `cookie-missing-secure:${cookieName}`),
+            ruleId: this.definition.id,
+            severity: getSeverity('cookie-missing-secure', 'warning'),
+            category: this.definition.category,
+            url: page.url,
+            message: `Cookie "${cookieName}" is missing the Secure flag.`,
+            recommendation: `Add the "Secure" attribute to cookie "${cookieName}" to ensure it is only transmitted over HTTPS.`,
+            documentationLink: this.definition.documentationLink,
+          });
+        }
+
+        if (!isCookieHttpOnly) {
+          findings.push({
+            id: createFindingId(this.definition.id, page.url, `cookie-missing-httponly:${cookieName}`),
+            ruleId: this.definition.id,
+            severity: getSeverity('cookie-missing-httponly', 'warning'),
+            category: this.definition.category,
+            url: page.url,
+            message: `Cookie "${cookieName}" is missing the HttpOnly flag.`,
+            recommendation: `Add the "HttpOnly" attribute to cookie "${cookieName}" to prevent client-side script access.`,
+            documentationLink: this.definition.documentationLink,
+          });
+        }
+
+        if (!hasSameSite) {
+          findings.push({
+            id: createFindingId(this.definition.id, page.url, `cookie-missing-samesite:${cookieName}`),
+            ruleId: this.definition.id,
+            severity: getSeverity('cookie-missing-samesite', 'info'),
+            category: this.definition.category,
+            url: page.url,
+            message: `Cookie "${cookieName}" is missing the SameSite attribute.`,
+            recommendation: `Add "SameSite=Lax" or "SameSite=Strict" to cookie "${cookieName}" to mitigate CSRF attacks.`,
+            documentationLink: this.definition.documentationLink,
+          });
+        }
+      }
+    }
+
+    return findings;
+  }
+}
+
+// 37b. Caching Headers Rule
+export class CachingHeadersRule implements Rule {
+  definition: RuleDefinition = {
+    id: 'caching-headers',
+    name: 'Caching Headers Assessment',
+    description: 'Checks for caching headers like Cache-Control and ETag to optimize performance.',
+    category: 'performance',
+    defaultSeverity: 'info',
+    defaultWeight: 5,
+    documentationLink: 'https://seocore.dev/docs/rules/caching-headers',
+  };
+
+  async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
+    const { enabled, severity } = getRuleSettings(this.definition, context.config);
+    if (!enabled) return [];
+
+    const findings: Finding[] = [];
+    const headers = page.headers || {};
+    const headerKeys = Object.keys(headers).map(k => k.toLowerCase());
+
     // Check for Cache-Control
     if (!headerKeys.includes('cache-control')) {
       findings.push({
         id: createFindingId(this.definition.id, page.url, 'missing-cache-control'),
         ruleId: this.definition.id,
-        severity: 'info',
+        severity,
         category: this.definition.category,
         url: page.url,
         message: 'Page is missing Cache-Control header.',
@@ -2703,7 +2916,7 @@ export class SecurityHeadersRule implements Rule {
       findings.push({
         id: createFindingId(this.definition.id, page.url, 'missing-etag'),
         ruleId: this.definition.id,
-        severity: 'info',
+        severity,
         category: this.definition.category,
         url: page.url,
         message: 'Page is missing ETag header.',
@@ -3052,16 +3265,13 @@ export class RuleEngine {
     new MobilePerformanceRule(),
     new MobileResponsiveDesignRule(),
     new MobileIndexingReadinessRule(),
-    new MissingBacklinkDataRule(),
-    new AnchorTextOverOptimizationRule(),
-    new LowAuthorityBacklinksRule(),
-    new MissingHighAuthorityBacklinksRule(),
     new SocialMetaRule(),
     new HreflangRule(),
     new SecurityRule(),
     new ContentQualityRule(),
     new InternalLinkingRule(),
     new SecurityHeadersRule(),
+    new CachingHeadersRule(),
     new ImageOptimizationRule(),
     new PaginationHealthRule(),
     new InternalLinkDistributionRule(),
@@ -3099,9 +3309,10 @@ export class RuleEngine {
   async run(
     pages: Record<string, NormalizedPage>,
     config: SeoConfig,
+    dataSources: Map<string, DataSource>,
+    tierConfig?: ExecutionTierConfig,
     backlinkData?: RuleEvaluationContext['backlinkData'],
-    backlinkError?: string,
-    tierConfig?: ExecutionTierConfig
+    backlinkError?: string
   ): Promise<Finding[]> {
     const activeRules = this.getRules(config, tierConfig);
     const allFindings: Finding[] = [];
@@ -3109,6 +3320,7 @@ export class RuleEngine {
     const context: RuleEvaluationContext = {
       allPages: pages,
       config,
+      dataSources,
       backlinkData,
       backlinkError,
     };

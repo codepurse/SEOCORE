@@ -12,7 +12,6 @@ export default defineConfig({
       '@seocore/crawler': resolve(__dirname, './packages/crawler/src/index.ts'),
       '@seocore/analyzers': resolve(__dirname, './packages/analyzers/src/index.ts'),
       '@seocore/rules': resolve(__dirname, './packages/rules/src/index.ts'),
-      '@seocore/scoring': resolve(__dirname, './packages/scoring/src/index.ts'),
       '@seocore/reporter': resolve(__dirname, './packages/reporter/src/index.ts'),
       '@seocore/engine': resolve(__dirname, './packages/engine/src/index.ts'),
       '@seocore/rule-utils': resolve(__dirname, './packages/rule-utils/src/index.ts'),

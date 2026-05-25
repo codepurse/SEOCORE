@@ -92,7 +92,15 @@
     - Use Playwright device descriptors (e.g., "iPhone 15 Pro") for accurate mobile screenshots.
     - Capture full-page screenshots of your website.
     - Deep crawl to capture screenshots for all pages listed in your sitemap.
-15. **Production-Ready Reporting**:
+15. **Dedicated Image Audit (`images` command)**:
+    - Audits page or site-wide images for SEO, performance, accessibility, and caching.
+    - Discovers assets from `<img>`, `<picture>`, inline `background-image`, and `<link rel="preload" as="image">`.
+    - Fetches metadata in parallel (size, format, cache headers, CDN signals) and decodes dimensions with `sharp`.
+    - Optional Playwright mode for rendered vs natural size, viewport placement, and LCP image detection.
+    - Rules cover payload weight, legacy formats, lazy-loading strategy, CLS risk, responsive `srcset`, alt text, and broken/mixed-content URLs.
+    - Byte-weighted scoring, mobile payload budgets (1.5MB), and LCP image weight targets (100KB).
+    - Exports terminal summary plus JSON or HTML reports with thumbnails and worst-offender tables.
+16. **Production-Ready Reporting**:
 
     - Real-time colored terminal logging via custom EventBus.
     - Exports rich, detailed audit logs in terminal, JSON, HTML, and SARIF formats.
@@ -335,6 +343,36 @@
    npm run cli -- screenshot https://example.com --timeout 60000
    ```
 
+   #### 18. Audit Images (SEO + Performance)
+   Audit images on a single page or across the site for weight, format, delivery, CLS, LCP, alt text, caching, and broken URLs. See [docs/commands/images.md](docs/commands/images.md) for the full rule catalog.
+
+   Single page (default):
+   ```bash
+   npm run cli -- images https://example.com
+   ```
+
+   Full site crawl (same origin, respects `robots.txt`; capped at ~100 pages and 500 unique images by default):
+   ```bash
+   npm run cli -- images https://example.com --crawl
+   ```
+
+   Playwright mode (rendered size, viewport, LCP element on the start URL):
+   ```bash
+   npm run cli -- images https://example.com --playwright
+   ```
+
+   Site crawl + Playwright + HTML report:
+   ```bash
+   npm run cli -- images https://example.com --crawl --playwright -f html -o ./seocore-images-report.html
+   ```
+
+   JSON export with custom thresholds:
+   ```bash
+   npm run cli -- images https://example.com --crawl --max-images 200 --threshold-kb 150 -f json -o ./images-audit.json
+   ```
+
+   **Flags:** `--crawl`, `--playwright`, `--threshold-kb` (default 200), `--concurrency` (default 5), `--max-images` (default 500), `--user-agent`, `--timeout` (default 10000ms), `-f json|html`, `-o <path>`.
+
    ### SDK Integration
 
    Import SEOCore directly into your Node/TypeScript backend:
@@ -381,7 +419,7 @@
    | `playwrightEnabled`| `boolean` | `false` | Enable Playwright headless rendering for SPAs. |
    | `excludePatterns` | `string[]` | `[]` | Glob/wildcard path list to bypass. |
    | `includePatterns` | `string[]` | `[]` | Glob/wildcard path list restricted for crawling. |
-   | `ruleOverrides` | `object` | `{}` | Disable, override weight/severity for rules. |
+   | `ruleOverrides` | `object` | `{}` | Disable, override weight/severity/findings for rules. Supports `findingSeverityOverrides`. |
 
    ### Example `seocore.config.json`
 
@@ -407,6 +445,12 @@
       },
       "duplicate-h1": {
          "enabled": false
+      },
+      "security-headers": {
+         "severity": "warning",
+         "findingSeverityOverrides": {
+            "security-headers:missing-csp": "error"
+         }
       }
    }
    }
