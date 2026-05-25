@@ -95,6 +95,7 @@ export class TerminalReporter {
       performance: [],
       mobile_seo: [],
       backlink_intelligence: [],
+      security: [],
     };
     for (const f of activeFindings) {
       if (findingsByCategory[f.category]) {
@@ -116,6 +117,7 @@ export class TerminalReporter {
       performance: pc.bgRed,
       mobile_seo: pc.bgBlue,
       backlink_intelligence: pc.bgGreen,
+      security: pc.bgYellow,
     };
 
     const sevColors: Record<Severity, any> = {

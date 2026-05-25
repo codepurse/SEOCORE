@@ -10,6 +10,7 @@ const DEFAULT_CATEGORY_WEIGHTS: Record<Category, number> = {
   performance: 0.10,
   mobile_seo: 0.15,
   backlink_intelligence: 0.10,
+  security: 0.10,
 };
 
 const DEFAULT_FLOOR_SCORES: Record<Category, number> = {
@@ -22,6 +23,7 @@ const DEFAULT_FLOOR_SCORES: Record<Category, number> = {
   performance: 20,
   mobile_seo: 20,
   backlink_intelligence: 20,
+  security: 20,
 };
 
 const SEVERITY_MULTIPLIERS: Record<Severity, number> = {
@@ -54,6 +56,7 @@ export class ScoringEngine {
       performance: this.initCategoryScore('performance'),
       mobile_seo: this.initCategoryScore('mobile_seo'),
       backlink_intelligence: this.initCategoryScore('backlink_intelligence'),
+      security: this.initCategoryScore('security'),
     };
 
     // 3. Count findings by severity per category
@@ -84,6 +87,7 @@ export class ScoringEngine {
       performance: 0,
       mobile_seo: 0,
       backlink_intelligence: 0,
+      security: 0,
     };
 
     for (const finding of findings) {

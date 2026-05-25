@@ -51,6 +51,7 @@ export const DEFAULT_CATEGORY_WEIGHTS: Record<Category, number> = {
   performance: 0.10,
   mobile_seo: 0.15,
   backlink_intelligence: 0.10,
+  security: 0.10,
 };
 
 export const DEFAULT_FLOOR_SCORES: Record<Category, number> = {
@@ -63,6 +64,7 @@ export const DEFAULT_FLOOR_SCORES: Record<Category, number> = {
   performance: 20,
   mobile_seo: 20,
   backlink_intelligence: 20,
+  security: 20,
 };
 
 export const TIER_PRESETS: Record<ExecutionTier, ExecutionTierConfig> = {
@@ -121,7 +123,7 @@ export const TIER_PRESETS: Record<ExecutionTier, ExecutionTierConfig> = {
       hreflang: false,
     },
     ruleFilter: {
-      categories: ['seo', 'metadata', 'indexing', 'links', 'performance', 'accessibility', 'mobile_seo'],
+      categories: ['seo', 'metadata', 'indexing', 'links', 'performance', 'accessibility', 'mobile_seo', 'security'],
       minSeverity: 'warning',
       maxRulesPerCategory: 20,
     },
@@ -151,7 +153,7 @@ export const TIER_PRESETS: Record<ExecutionTier, ExecutionTierConfig> = {
       hreflang: true,
     },
     ruleFilter: {
-      categories: ['seo', 'metadata', 'indexing', 'links', 'performance', 'accessibility', 'mobile_seo', 'ai_visibility'],
+      categories: ['seo', 'metadata', 'indexing', 'links', 'performance', 'accessibility', 'mobile_seo', 'ai_visibility', 'security'],
       minSeverity: 'info',
       maxRulesPerCategory: 50,
     },
@@ -181,7 +183,7 @@ export const TIER_PRESETS: Record<ExecutionTier, ExecutionTierConfig> = {
       hreflang: true,
     },
     ruleFilter: {
-      categories: ['seo', 'metadata', 'indexing', 'links', 'performance', 'accessibility', 'mobile_seo', 'ai_visibility', 'backlink_intelligence'],
+      categories: ['seo', 'metadata', 'indexing', 'links', 'performance', 'accessibility', 'mobile_seo', 'ai_visibility', 'backlink_intelligence', 'security'],
       minSeverity: 'info',
       maxRulesPerCategory: 100,
     },

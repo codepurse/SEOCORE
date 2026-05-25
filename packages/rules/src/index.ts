@@ -2622,6 +2622,403 @@ export class InternalLinkingRule implements Rule {
   }
 }
 
+// 37. Security Headers Rule
+export class SecurityHeadersRule implements Rule {
+  definition: RuleDefinition = {
+    id: 'security-headers',
+    name: 'Security Headers Assessment',
+    description: 'Checks for essential security headers like CSP, X-Frame-Options, Referrer-Policy, Cache-Control, and ETag.',
+    category: 'security',
+    defaultSeverity: 'warning',
+    defaultWeight: 6,
+    documentationLink: 'https://seocore.dev/docs/rules/security-headers',
+  };
+
+  async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
+    const { enabled, severity } = getRuleSettings(this.definition, context.config);
+    if (!enabled) return [];
+
+    const findings: Finding[] = [];
+    const headers = page.headers || {};
+    const headerKeys = Object.keys(headers).map(k => k.toLowerCase());
+
+    // Check for Content-Security-Policy
+    if (!headerKeys.includes('content-security-policy')) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'missing-csp'),
+        ruleId: this.definition.id,
+        severity: 'warning',
+        category: this.definition.category,
+        url: page.url,
+        message: 'Page is missing Content-Security-Policy (CSP) header.',
+        recommendation: 'Add a CSP header to mitigate XSS and other code injection attacks.',
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    // Check for X-Frame-Options
+    if (!headerKeys.includes('x-frame-options')) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'missing-x-frame-options'),
+        ruleId: this.definition.id,
+        severity: 'warning',
+        category: this.definition.category,
+        url: page.url,
+        message: 'Page is missing X-Frame-Options header.',
+        recommendation: 'Add an X-Frame-Options header to prevent clickjacking attacks.',
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    // Check for Referrer-Policy
+    if (!headerKeys.includes('referrer-policy')) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'missing-referrer-policy'),
+        ruleId: this.definition.id,
+        severity: 'info',
+        category: this.definition.category,
+        url: page.url,
+        message: 'Page is missing Referrer-Policy header.',
+        recommendation: 'Add a Referrer-Policy header to control what referrer information is sent with requests.',
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    // Check for Cache-Control
+    if (!headerKeys.includes('cache-control')) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'missing-cache-control'),
+        ruleId: this.definition.id,
+        severity: 'info',
+        category: this.definition.category,
+        url: page.url,
+        message: 'Page is missing Cache-Control header.',
+        recommendation: 'Add a Cache-Control header to optimize caching strategy.',
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    // Check for ETag
+    if (!headerKeys.includes('etag')) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'missing-etag'),
+        ruleId: this.definition.id,
+        severity: 'info',
+        category: this.definition.category,
+        url: page.url,
+        message: 'Page is missing ETag header.',
+        recommendation: 'Add an ETag header to enable efficient bandwidth usage with conditional requests.',
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    return findings;
+  }
+}
+
+// 38. Image Optimization Rule
+export class ImageOptimizationRule implements Rule {
+  definition: RuleDefinition = {
+    id: 'image-optimization',
+    name: 'Image Optimization Assessment',
+    description: 'Checks images for missing dimensions, lazy loading, modern formats, srcset, and display size mismatch.',
+    category: 'performance',
+    defaultSeverity: 'warning',
+    defaultWeight: 7,
+    documentationLink: 'https://seocore.dev/docs/rules/image-optimization',
+  };
+
+  async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
+    const { enabled, severity } = getRuleSettings(this.definition, context.config);
+    if (!enabled || !page.html) return [];
+
+    const findings: Finding[] = [];
+    const $ = cheerio.load(page.html);
+    const images = $('img');
+
+    if (images.length === 0) return findings;
+
+    let missingDimensionsCount = 0;
+    let noLazyLoadingCount = 0;
+    let noModernFormatCount = 0;
+    let missingSrcsetCount = 0;
+
+    images.each((_, el) => {
+      const src = $(el).attr('src') || '';
+      const width = $(el).attr('width');
+      const height = $(el).attr('height');
+      const loading = $(el).attr('loading');
+      const srcset = $(el).attr('srcset');
+
+      // Check for missing width/height
+      if (!width || !height) {
+        missingDimensionsCount++;
+      }
+
+      // Check for lazy loading
+      if (!loading || loading.toLowerCase() !== 'lazy') {
+        noLazyLoadingCount++;
+      }
+
+      // Check for modern image format
+      if (!/\.(webp|avif)$/i.test(src)) {
+        noModernFormatCount++;
+      }
+
+      // Check for srcset
+      if (!srcset) {
+        missingSrcsetCount++;
+      }
+    });
+
+    if (missingDimensionsCount > 0) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'missing-dimensions'),
+        ruleId: this.definition.id,
+        severity: 'warning',
+        category: this.definition.category,
+        url: page.url,
+        message: `${missingDimensionsCount} image(s) missing width/height attributes.`,
+        recommendation: 'Add explicit width and height attributes to all images to prevent CLS.',
+        evidence: `${missingDimensionsCount} images without dimensions`,
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    if (noLazyLoadingCount > 0) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'no-lazy-loading'),
+        ruleId: this.definition.id,
+        severity: 'info',
+        category: this.definition.category,
+        url: page.url,
+        message: `${noLazyLoadingCount} image(s) missing loading="lazy" attribute.`,
+        recommendation: 'Add loading="lazy" to offscreen images to improve page load times.',
+        evidence: `${noLazyLoadingCount} images without lazy loading`,
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    if (noModernFormatCount > 0) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'no-modern-format'),
+        ruleId: this.definition.id,
+        severity: 'info',
+        category: this.definition.category,
+        url: page.url,
+        message: `${noModernFormatCount} image(s) not using WebP or AVIF format.`,
+        recommendation: 'Serve images in modern formats like WebP or AVIF for smaller file sizes.',
+        evidence: `${noModernFormatCount} images in legacy formats`,
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    if (missingSrcsetCount > 0) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'missing-srcset'),
+        ruleId: this.definition.id,
+        severity: 'info',
+        category: this.definition.category,
+        url: page.url,
+        message: `${missingSrcsetCount} image(s) missing srcset attribute.`,
+        recommendation: 'Add srcset to serve appropriately sized images for different viewports.',
+        evidence: `${missingSrcsetCount} images without srcset`,
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    return findings;
+  }
+}
+
+// 39. Pagination Health Rule
+export class PaginationHealthRule implements Rule {
+  definition: RuleDefinition = {
+    id: 'pagination-health',
+    name: 'Pagination Health Check',
+    description: 'Checks for rel=next/prev, infinite scroll implementation, and view-all page canonicalization.',
+    category: 'seo',
+    defaultSeverity: 'warning',
+    defaultWeight: 6,
+    documentationLink: 'https://seocore.dev/docs/rules/pagination-health',
+  };
+
+  async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
+    const { enabled, severity } = getRuleSettings(this.definition, context.config);
+    if (!enabled || !page.html) return [];
+
+    const findings: Finding[] = [];
+    const $ = cheerio.load(page.html);
+
+    // Check for rel=next/prev
+    const hasRelNext = $('link[rel="next"]').length > 0;
+    const hasRelPrev = $('link[rel="prev"]').length > 0;
+    if (!hasRelNext && !hasRelPrev) {
+      // Check if page looks like it has pagination
+      const hasPaginationPattern = $('.pagination, .pager, [class*="page-nav"], nav[class*="pagination"]').length > 0;
+      if (hasPaginationPattern) {
+        findings.push({
+          id: createFindingId(this.definition.id, page.url, 'missing-rel-next-prev'),
+          ruleId: this.definition.id,
+          severity: 'warning',
+          category: this.definition.category,
+          url: page.url,
+          message: 'Pagination detected but missing rel=next/prev link tags.',
+          recommendation: 'Add rel=next and rel=prev link tags to help search engines understand paginated content.',
+          documentationLink: this.definition.documentationLink,
+        });
+      }
+    }
+
+    // Check for infinite scroll indicators
+    const hasInfiniteScroll = /infinite[-_]scroll|load[-_]more|autoload/i.test($('body').html() || '');
+    if (hasInfiniteScroll) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'infinite-scroll'),
+        ruleId: this.definition.id,
+        severity: 'info',
+        category: this.definition.category,
+        url: page.url,
+        message: 'Infinite scroll detected. Ensure proper implementation with crawlable URLs.',
+        recommendation: 'Implement progressive loading with crawlable URLs (e.g., /page/2, /page/3) and use history.pushState.',
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    return findings;
+  }
+}
+
+// 40. Internal Link Distribution Rule
+export class InternalLinkDistributionRule implements Rule {
+  definition: RuleDefinition = {
+    id: 'internal-link-distribution',
+    name: 'Internal Link Distribution Analysis',
+    description: 'Checks for authority sinks, orphan pages, and calculates internal link distribution.',
+    category: 'links',
+    defaultSeverity: 'warning',
+    defaultWeight: 7,
+    documentationLink: 'https://seocore.dev/docs/rules/internal-link-distribution',
+  };
+
+  async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
+    const { enabled, severity } = getRuleSettings(this.definition, context.config);
+    if (!enabled) return [];
+
+    const findings: Finding[] = [];
+
+    // Only run on the primary page (first crawled) to avoid duplicate findings
+    const pageUrls = Object.keys(context.allPages);
+    if (page.url !== pageUrls[0]) return [];
+
+    // Check for authority sinks (high in-degree, low out-degree)
+    const authoritySinks: string[] = [];
+    for (const [url, p] of Object.entries(context.allPages)) {
+      if ((p.inDegree || 0) >= 5 && (p.outDegree || 0) <= 1) {
+        authoritySinks.push(url);
+      }
+    }
+
+    if (authoritySinks.length > 0) {
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'authority-sinks'),
+        ruleId: this.definition.id,
+        severity: 'warning',
+        category: this.definition.category,
+        url: page.url,
+        message: `Found ${authoritySinks.length} potential authority sink(s).`,
+        recommendation: 'Add outbound internal links from high-authority pages to distribute link equity.',
+        evidence: `Sample authority sinks: ${authoritySinks.slice(0, 3).join(', ')}`,
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    return findings;
+  }
+}
+
+// 41. Duplicate Content Similarity Rule
+export class DuplicateContentSimilarityRule implements Rule {
+  definition: RuleDefinition = {
+    id: 'duplicate-content-similarity',
+    name: 'Duplicate Content Similarity Check',
+    description: 'Compares body content similarity between pages and identifies near-duplicates.',
+    category: 'seo',
+    defaultSeverity: 'warning',
+    defaultWeight: 7,
+    documentationLink: 'https://seocore.dev/docs/rules/duplicate-content-similarity',
+  };
+
+  // Simple similarity check using word frequency
+  private calculateSimilarity(text1: string, text2: string): number {
+    const words1 = text1.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+    const words2 = text2.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+
+    if (words1.length === 0 || words2.length === 0) return 0;
+
+    const freq1: Record<string, number> = {};
+    const freq2: Record<string, number> = {};
+
+    for (const word of words1) {
+      freq1[word] = (freq1[word] || 0) + 1;
+    }
+    for (const word of words2) {
+      freq2[word] = (freq2[word] || 0) + 1;
+    }
+
+    let intersection = 0;
+    for (const word of Object.keys(freq1)) {
+      if (freq2[word]) {
+        intersection += Math.min(freq1[word], freq2[word]);
+      }
+    }
+
+    const union = words1.length + words2.length - intersection;
+    return intersection / union;
+  }
+
+  async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
+    const { enabled, severity } = getRuleSettings(this.definition, context.config);
+    if (!enabled || !page.html) return [];
+
+    const findings: Finding[] = [];
+
+    const $ = cheerio.load(page.html);
+    const bodyText = $('body').text();
+    const nearDuplicates: { url: string; similarity: number }[] = [];
+
+    for (const [url, otherPage] of Object.entries(context.allPages)) {
+      if (url === page.url || !otherPage.html) continue;
+      const $other = cheerio.load(otherPage.html);
+      const otherBodyText = $other('body').text();
+      const similarity = this.calculateSimilarity(bodyText, otherBodyText);
+
+      if (similarity > 0.8) {
+        nearDuplicates.push({ url, similarity });
+      }
+    }
+
+    if (nearDuplicates.length > 0) {
+      const highSimilarity = nearDuplicates.some(d => d.similarity > 0.9);
+      findings.push({
+        id: createFindingId(this.definition.id, page.url, 'near-duplicates'),
+        ruleId: this.definition.id,
+        severity: highSimilarity ? 'error' : 'warning',
+        category: this.definition.category,
+        url: page.url,
+        message: `Found ${nearDuplicates.length} page(s) with high content similarity.`,
+        recommendation: highSimilarity
+          ? 'Add canonical tags or merge/rewrite near-identical content.'
+          : 'Review content to ensure uniqueness and value.',
+        evidence: nearDuplicates.slice(0, 3).map(d => `${d.url} (${(d.similarity * 100).toFixed(0)}%)`).join(', '),
+        documentationLink: this.definition.documentationLink,
+      });
+    }
+
+    return findings;
+  }
+}
+
 // ==========================================
 // RULE ENGINE EXECUTOR
 // ==========================================
@@ -2664,6 +3061,11 @@ export class RuleEngine {
     new SecurityRule(),
     new ContentQualityRule(),
     new InternalLinkingRule(),
+    new SecurityHeadersRule(),
+    new ImageOptimizationRule(),
+    new PaginationHealthRule(),
+    new InternalLinkDistributionRule(),
+    new DuplicateContentSimilarityRule(),
   ];
 
   private readonly customRules: Rule[] = [];

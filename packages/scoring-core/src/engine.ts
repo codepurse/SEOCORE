@@ -84,7 +84,7 @@ export class ScoringEngine {
   }
 
   private static initCategories(): Record<Category, CategoryScore> {
-    const cats: Category[] = ['seo', 'performance', 'accessibility', 'indexing', 'links', 'metadata', 'ai_visibility', 'mobile_seo', 'backlink_intelligence'];
+    const cats: Category[] = ['seo', 'performance', 'accessibility', 'indexing', 'links', 'metadata', 'ai_visibility', 'mobile_seo', 'backlink_intelligence', 'security'];
     const result = {} as Record<Category, CategoryScore>;
     for (const cat of cats) {
       result[cat] = {
@@ -100,7 +100,7 @@ export class ScoringEngine {
   private static initCategoryDeductions(): Record<Category, number> {
     return {
       seo: 0, performance: 0, accessibility: 0, indexing: 0,
-      links: 0, metadata: 0, ai_visibility: 0, mobile_seo: 0, backlink_intelligence: 0,
+      links: 0, metadata: 0, ai_visibility: 0, mobile_seo: 0, backlink_intelligence: 0, security: 0,
     };
   }
 }

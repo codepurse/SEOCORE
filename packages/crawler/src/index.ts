@@ -132,6 +132,7 @@ export class LighthouseCrawler implements Crawler {
         statusCode: httpResult.statusCode,
         loadTimeMs: httpResult.loadTimeMs,
         contentType: httpResult.contentType,
+        headers: httpResult.headers,
         redirectChain: httpResult.redirectChain,
         resources,
         lighthouse: {
@@ -449,12 +450,18 @@ export class HttpCrawler implements Crawler {
         }
 
         const html = await response.text();
+        // Capture response headers
+        const headers: Record<string, string> = {};
+        response.headers.forEach((value, key) => {
+          headers[key] = value;
+        });
         return {
           url: currentUrl,
           html,
           statusCode: response.status,
           loadTimeMs,
           contentType,
+          headers,
           redirectChain,
         };
       } catch (err: any) {
@@ -592,6 +599,7 @@ export class PlaywrightCrawler implements Crawler {
         statusCode,
         loadTimeMs,
         contentType,
+        headers,
         resources: {
           pageSizeBytes,
           jsSizeBytes,

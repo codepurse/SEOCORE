@@ -12,6 +12,7 @@ export interface NormalizedPage {
   statusCode: number;
   loadTimeMs: number;
   contentType: string;
+  headers?: Record<string, string>;
   html?: string; // Original HTML content for deep structural scanning
   title?: string;
   metaDescription?: string;
@@ -86,7 +87,7 @@ export interface NormalizedPage {
 }
 
 export type Severity = 'critical' | 'error' | 'warning' | 'info';
-export type Category = 'seo' | 'performance' | 'accessibility' | 'indexing' | 'links' | 'metadata' | 'ai_visibility' | 'mobile_seo' | 'backlink_intelligence';
+export type Category = 'seo' | 'performance' | 'accessibility' | 'indexing' | 'links' | 'metadata' | 'ai_visibility' | 'mobile_seo' | 'backlink_intelligence' | 'security';
 
 export interface Finding {
   id: string; // ruleId:url-hash
@@ -264,6 +265,7 @@ export interface CrawlResult {
   statusCode: number;
   loadTimeMs: number;
   contentType: string;
+  headers?: Record<string, string>;
   error?: string;
   redirectChain?: RedirectHop[];
   resources?: {

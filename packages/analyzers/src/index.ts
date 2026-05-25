@@ -22,6 +22,7 @@ export class PageNormalizer {
       statusCode,
       loadTimeMs,
       contentType,
+      headers: result.headers,
       html, // Store raw html for deep rule engine scanning
       headings: { h1: [], h2: [], h3: [] },
       links: [],
