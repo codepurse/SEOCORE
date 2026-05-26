@@ -1,5 +1,5 @@
 import { Rule, RuleDefinition, RuleEvaluationContext, Finding, NormalizedPage, BacklinkIntelligenceData } from '@seocore/sdk';
-import { createFindingId, getRuleSettings, getPrimaryBacklinkPage } from '@seocore/rules';
+import { createFindingId, getRuleSettings, getPrimaryBacklinkPage } from '@seocore/rule-utils';
 
 export class MissingHighAuthorityBacklinksRule implements Rule {
   definition: RuleDefinition = {
@@ -7,6 +7,7 @@ export class MissingHighAuthorityBacklinksRule implements Rule {
     name: 'Missing High-Authority Backlinks',
     description: 'Alerts when the site has very few or no backlinks from high-authority domains.',
     category: 'backlink_intelligence',
+    module: 'backlinks',
     defaultSeverity: 'warning',
     defaultWeight: 4,
     documentationLink: 'https://seocore.dev/docs/rules/missing-high-authority-backlinks',

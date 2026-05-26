@@ -1,0 +1,552 @@
+{
+  "url": "https://example.com",
+  "timestamp": "2026-05-26T02:27:08.869Z",
+  "config": {
+    "preset": "standard",
+    "maxPages": 1,
+    "maxDepth": 1
+  },
+  "score": 81,
+  "categories": {
+    "seo": {
+      "category": "seo",
+      "score": 96,
+      "totalDeductions": 4,
+      "findingsCount": {
+        "critical": 0,
+        "error": 0,
+        "warning": 2,
+        "info": 0
+      }
+    },
+    "performance": {
+      "category": "performance",
+      "score": 100,
+      "totalDeductions": 0,
+      "findingsCount": {
+        "critical": 0,
+        "error": 0,
+        "warning": 0,
+        "info": 0
+      }
+    },
+    "accessibility": {
+      "category": "accessibility",
+      "score": 100,
+      "totalDeductions": 0,
+      "findingsCount": {
+        "critical": 0,
+        "error": 0,
+        "warning": 0,
+        "info": 0
+      }
+    },
+    "indexing": {
+      "category": "indexing",
+      "score": 81,
+      "totalDeductions": 19,
+      "findingsCount": {
+        "critical": 0,
+        "error": 3,
+        "warning": 0,
+        "info": 0
+      }
+    },
+    "links": {
+      "category": "links",
+      "score": 98,
+      "totalDeductions": 2,
+      "findingsCount": {
+        "critical": 0,
+        "error": 0,
+        "warning": 1,
+        "info": 0
+      }
+    },
+    "metadata": {
+      "category": "metadata",
+      "score": 90,
+      "totalDeductions": 9.7,
+      "findingsCount": {
+        "critical": 0,
+        "error": 1,
+        "warning": 1,
+        "info": 1
+      }
+    },
+    "ai_visibility": {
+      "category": "ai_visibility",
+      "score": 100,
+      "totalDeductions": 0,
+      "findingsCount": {
+        "critical": 0,
+        "error": 0,
+        "warning": 0,
+        "info": 0
+      }
+    },
+    "mobile_seo": {
+      "category": "mobile_seo",
+      "score": 30,
+      "totalDeductions": 70,
+      "findingsCount": {
+        "critical": 0,
+        "error": 1,
+        "warning": 10,
+        "info": 0
+      }
+    },
+    "backlink_intelligence": {
+      "category": "backlink_intelligence",
+      "score": 100,
+      "totalDeductions": 0,
+      "findingsCount": {
+        "critical": 0,
+        "error": 0,
+        "warning": 0,
+        "info": 0
+      }
+    },
+    "security": {
+      "category": "security",
+      "score": 23,
+      "totalDeductions": 77,
+      "findingsCount": {
+        "critical": 0,
+        "error": 1,
+        "warning": 8,
+        "info": 0
+      }
+    }
+  },
+  "findings": [
+    {
+      "id": "missing-meta-description:aHR0cHM6Ly9leGFt",
+      "ruleId": "missing-meta-description",
+      "subCheck": "missing",
+      "severity": "error",
+      "category": "metadata",
+      "url": "https://example.com",
+      "message": "Page is missing a meta description tag.",
+      "recommendation": "Add a meta description tag <meta name=\"description\" content=\"...\"> to summarize page content in 150-160 characters.",
+      "documentationLink": "https://seocore.dev/docs/rules/missing-meta-description"
+    },
+    {
+      "id": "canonical-issues:aHR0cHM6Ly9leGFt:hoq0km",
+      "ruleId": "canonical-issues",
+      "subCheck": "missing",
+      "severity": "error",
+      "category": "indexing",
+      "url": "https://example.com",
+      "message": "Page is missing a canonical link element.",
+      "recommendation": "Add a <link rel=\"canonical\" href=\"...\"> element to prevent duplicate content indexing issues.",
+      "documentationLink": "https://seocore.dev/docs/rules/canonical-issues"
+    },
+    {
+      "id": "missing-structured-data:aHR0cHM6Ly9leGFt",
+      "ruleId": "missing-structured-data",
+      "subCheck": "missing",
+      "severity": "warning",
+      "category": "seo",
+      "url": "https://example.com",
+      "message": "Page is missing Schema.org structured data (JSON-LD).",
+      "recommendation": "Implement structured data (e.g. Article, Product, Organization, BreadcrumbList) in JSON-LD format to qualify for rich search results.",
+      "documentationLink": "https://seocore.dev/docs/rules/missing-structured-data"
+    },
+    {
+      "id": "missing-robots-txt:aHR0cHM6Ly9leGFt",
+      "ruleId": "missing-robots-txt",
+      "subCheck": "missing-robots-txt",
+      "severity": "error",
+      "category": "indexing",
+      "url": "https://example.com",
+      "message": "Site robots.txt file was not found or unreachable.",
+      "recommendation": "Create a robots.txt file at the root of your host (e.g., https://yourdomain.com/robots.txt) to direct search engine crawl behavior.",
+      "documentationLink": "https://seocore.dev/docs/rules/missing-robots-txt"
+    },
+    {
+      "id": "missing-sitemap-xml:aHR0cHM6Ly9leGFt",
+      "ruleId": "missing-sitemap-xml",
+      "subCheck": "missing-sitemap-xml",
+      "severity": "error",
+      "category": "indexing",
+      "url": "https://example.com",
+      "message": "Site sitemap.xml file was not found or unreachable.",
+      "recommendation": "Generate an XML sitemap and place it at the root of your host. Reference its URL in robots.txt so crawlers can discover your pages.",
+      "documentationLink": "https://seocore.dev/docs/rules/missing-sitemap-xml"
+    },
+    {
+      "id": "social-meta:aHR0cHM6Ly9leGFt:1km8gx",
+      "ruleId": "social-meta",
+      "subCheck": "missing-og",
+      "severity": "warning",
+      "category": "metadata",
+      "url": "https://example.com",
+      "message": "Page is missing OpenGraph meta tags.",
+      "recommendation": "Add OpenGraph tags (og:title, og:description, og:image, og:url) to enhance social sharing and AI crawler visibility.",
+      "documentationLink": "https://seocore.dev/docs/rules/social-meta"
+    },
+    {
+      "id": "social-meta:aHR0cHM6Ly9leGFt:gwdx58",
+      "ruleId": "social-meta",
+      "subCheck": "missing-twitter",
+      "severity": "info",
+      "category": "metadata",
+      "url": "https://example.com",
+      "message": "Page is missing Twitter Card meta tags.",
+      "recommendation": "Add Twitter Card tags (twitter:card, twitter:title, twitter:description, twitter:image) to enhance Twitter sharing.",
+      "documentationLink": "https://seocore.dev/docs/rules/social-meta"
+    },
+    {
+      "id": "content-quality:aHR0cHM6Ly9leGFt:pl95j9",
+      "ruleId": "content-quality",
+      "subCheck": "thin-content",
+      "severity": "warning",
+      "category": "seo",
+      "url": "https://example.com",
+      "message": "Page has thin content.",
+      "recommendation": "Add more unique, valuable content to the page to improve its quality and relevance.",
+      "evidence": "Word count: 17",
+      "documentationLink": "https://seocore.dev/docs/rules/content-quality"
+    },
+    {
+      "id": "internal-linking:aHR0cHM6Ly9leGFt:dmr4o",
+      "ruleId": "internal-linking",
+      "subCheck": "no-outbound-links",
+      "severity": "warning",
+      "category": "links",
+      "url": "https://example.com",
+      "message": "Page has no outbound internal links.",
+      "recommendation": "Add relevant internal links to other pages on your site to improve navigation and crawlability.",
+      "documentationLink": "https://seocore.dev/docs/rules/internal-linking"
+    },
+    {
+      "id": "mobile-usability:aHR0cHM6Ly9leGFt:ye7w52",
+      "ruleId": "mobile-usability",
+      "subCheck": "no-inline-styles",
+      "severity": "warning",
+      "category": "mobile_seo",
+      "url": "https://example.com",
+      "message": "No inline styles found — layout sub-checks score 0, mark UNVERIFIABLE",
+      "recommendation": "Add inline styles or CSS elements to verify layout responsiveness.",
+      "documentationLink": "https://seocore.dev/docs/rules/mobile-usability"
+    },
+    {
+      "id": "mobile-usability:aHR0cHM6Ly9leGFt:u4b3cq",
+      "ruleId": "mobile-usability",
+      "subCheck": "no-nav-element",
+      "severity": "warning",
+      "category": "mobile_seo",
+      "url": "https://example.com",
+      "message": "No nav element found — nav sub-checks score 0",
+      "recommendation": "Ensure structural navigation tags (<nav> or navigation classes) are present on mobile devices.",
+      "documentationLink": "https://seocore.dev/docs/rules/mobile-usability"
+    },
+    {
+      "id": "mobile-performance:aHR0cHM6Ly9leGFt:6ioa1k",
+      "ruleId": "mobile-performance",
+      "subCheck": "unverifiable-lcp",
+      "severity": "warning",
+      "category": "mobile_seo",
+      "url": "https://example.com",
+      "message": "LCP/FID/INP metrics: Unverifiable from static crawl — scored 0",
+      "recommendation": "Enable Playwright crawl to gather real-time performance data and Core Web Vitals.",
+      "documentationLink": "https://seocore.dev/docs/rules/mobile-performance"
+    },
+    {
+      "id": "mobile-performance:aHR0cHM6Ly9leGFt:6ioghz",
+      "ruleId": "mobile-performance",
+      "subCheck": "unverifiable-cls",
+      "severity": "warning",
+      "category": "mobile_seo",
+      "url": "https://example.com",
+      "message": "Layout shift behavior: Unverifiable from static crawl — scored 0",
+      "recommendation": "Enable Playwright crawl to inspect real Cumulative Layout Shift.",
+      "documentationLink": "https://seocore.dev/docs/rules/mobile-performance"
+    },
+    {
+      "id": "mobile-performance:aHR0cHM6Ly9leGFt:g2raaj",
+      "ruleId": "mobile-performance",
+      "subCheck": "unverifiable-js-execution",
+      "severity": "warning",
+      "category": "mobile_seo",
+      "url": "https://example.com",
+      "message": "JS execution time: Unverifiable from static crawl — scored 0",
+      "recommendation": "Enable Playwright crawl to measure main thread JS execution CPU times.",
+      "documentationLink": "https://seocore.dev/docs/rules/mobile-performance"
+    },
+    {
+      "id": "mobile-performance:aHR0cHM6Ly9leGFt:ghvspj",
+      "ruleId": "mobile-performance",
+      "subCheck": "unverifiable-image-load",
+      "severity": "warning",
+      "category": "mobile_seo",
+      "url": "https://example.com",
+      "message": "Real image load performance: Unverifiable from static crawl — scored 0",
+      "recommendation": "Enable Playwright crawl to check image network load performance.",
+      "documentationLink": "https://seocore.dev/docs/rules/mobile-performance"
+    },
+    {
+      "id": "mobile-performance:aHR0cHM6Ly9leGFt:lwl7cp",
+      "ruleId": "mobile-performance",
+      "subCheck": "no-images-found",
+      "severity": "warning",
+      "category": "mobile_seo",
+      "url": "https://example.com",
+      "message": "No images detected to evaluate",
+      "recommendation": "Include relevant images on your mobile page to evaluate optimization.",
+      "documentationLink": "https://seocore.dev/docs/rules/mobile-performance"
+    },
+    {
+      "id": "mobile-responsive:aHR0cHM6Ly9leGFt:4x6fw1",
+      "ruleId": "mobile-responsive",
+      "subCheck": "unverifiable-breakpoints",
+      "severity": "warning",
+      "category": "mobile_seo",
+      "url": "https://example.com",
+      "message": "Actual breakpoint rendering: Unverifiable from static crawl — scored 0",
+      "recommendation": "Enable Playwright crawl to perform actual mobile viewport breakpoint rendering validation.",
+      "documentationLink": "https://seocore.dev/docs/rules/mobile-responsive"
+    },
+    {
+      "id": "mobile-responsive:aHR0cHM6Ly9leGFt:x1hyl2",
+      "ruleId": "mobile-responsive",
+      "subCheck": "missing-media-queries",
+      "severity": "error",
+      "category": "mobile_seo",
+      "url": "https://example.com",
+      "message": "No CSS media queries detected on the page structure.",
+      "recommendation": "Implement CSS media queries (e.g. @media (max-width: 768px)) to adjust layout styles dynamically depending on device screen sizes.",
+      "evidence": "Zero @media queries or responsive link media tags found in page HTML.",
+      "documentationLink": "https://seocore.dev/docs/rules/mobile-responsive"
+    },
+    {
+      "id": "mobile-indexing:aHR0cHM6Ly9leGFt:8xi960",
+      "ruleId": "mobile-indexing",
+      "subCheck": "missing-schema",
+      "severity": "warning",
+      "category": "mobile_seo",
+      "url": "https://example.com",
+      "message": "Structured schema markup is missing or invalid on mobile.",
+      "recommendation": "Google indexing is entirely mobile-first. Schema.org structured data (JSON-LD) must be present and syntactically valid on the mobile rendering to appear in mobile search results.",
+      "evidence": "No structured data",
+      "documentationLink": "https://seocore.dev/docs/rules/mobile-indexing"
+    },
+    {
+      "id": "mobile-indexing:aHR0cHM6Ly9leGFt:9idx2r",
+      "ruleId": "mobile-indexing",
+      "subCheck": "missing-canonical",
+      "severity": "warning",
+      "category": "mobile_seo",
+      "url": "https://example.com",
+      "message": "Missing canonical URL link element.",
+      "recommendation": "Add a self-referential <link rel=\"canonical\" href=\"...\"> to prevent duplicate indexing across desktop and mobile URL versions.",
+      "documentationLink": "https://seocore.dev/docs/rules/mobile-indexing"
+    },
+    {
+      "id": "security-headers:aHR0cHM6Ly9leGFt:m9yivt",
+      "ruleId": "security-headers",
+      "subCheck": "missing-csp",
+      "severity": "error",
+      "category": "security",
+      "url": "https://example.com",
+      "message": "Page is missing Content-Security-Policy (CSP) header.",
+      "recommendation": "Add a CSP header to mitigate XSS and other code injection attacks.",
+      "documentationLink": "https://seocore.dev/docs/rules/security-headers"
+    },
+    {
+      "id": "security-headers:aHR0cHM6Ly9leGFt:txmncu",
+      "ruleId": "security-headers",
+      "subCheck": "missing-x-frame-options",
+      "severity": "warning",
+      "category": "security",
+      "url": "https://example.com",
+      "message": "Page is missing X-Frame-Options header.",
+      "recommendation": "Add an X-Frame-Options header to prevent clickjacking attacks.",
+      "documentationLink": "https://seocore.dev/docs/rules/security-headers"
+    },
+    {
+      "id": "security-headers:aHR0cHM6Ly9leGFt:yx1ebr",
+      "ruleId": "security-headers",
+      "subCheck": "missing-referrer-policy",
+      "severity": "warning",
+      "category": "security",
+      "url": "https://example.com",
+      "message": "Page is missing Referrer-Policy header.",
+      "recommendation": "Add a Referrer-Policy header to control what referrer information is sent with requests.",
+      "documentationLink": "https://seocore.dev/docs/rules/security-headers"
+    },
+    {
+      "id": "security-headers:aHR0cHM6Ly9leGFt:jqb38v",
+      "ruleId": "security-headers",
+      "subCheck": "missing-hsts",
+      "severity": "warning",
+      "category": "security",
+      "url": "https://example.com",
+      "message": "Page is missing HTTP Strict Transport Security (HSTS) header.",
+      "recommendation": "Add the Strict-Transport-Security header to force clients to use HTTPS.",
+      "documentationLink": "https://seocore.dev/docs/rules/security-headers"
+    },
+    {
+      "id": "security-headers:aHR0cHM6Ly9leGFt:j2egrf",
+      "ruleId": "security-headers",
+      "subCheck": "missing-x-content-type-options",
+      "severity": "warning",
+      "category": "security",
+      "url": "https://example.com",
+      "message": "Page is missing X-Content-Type-Options header.",
+      "recommendation": "Add `X-Content-Type-Options: nosniff` to prevent MIME sniffing attacks.",
+      "documentationLink": "https://seocore.dev/docs/rules/security-headers"
+    },
+    {
+      "id": "security-headers:aHR0cHM6Ly9leGFt:mhxpr2",
+      "ruleId": "security-headers",
+      "subCheck": "missing-permissions-policy",
+      "severity": "warning",
+      "category": "security",
+      "url": "https://example.com",
+      "message": "Page is missing Permissions-Policy header.",
+      "recommendation": "Add `Permissions-Policy` header to control browser feature access (camera, microphone, geolocation, etc.).",
+      "documentationLink": "https://seocore.dev/docs/rules/security-headers"
+    },
+    {
+      "id": "security-headers:aHR0cHM6Ly9leGFt:jqed9o",
+      "ruleId": "security-headers",
+      "subCheck": "missing-coop",
+      "severity": "warning",
+      "category": "security",
+      "url": "https://example.com",
+      "message": "Page is missing Cross-Origin-Opener-Policy (COOP) header.",
+      "recommendation": "Add `Cross-Origin-Opener-Policy: same-origin` to isolate your execution context.",
+      "documentationLink": "https://seocore.dev/docs/rules/security-headers"
+    },
+    {
+      "id": "security-headers:aHR0cHM6Ly9leGFt:jqedia",
+      "ruleId": "security-headers",
+      "subCheck": "missing-coep",
+      "severity": "warning",
+      "category": "security",
+      "url": "https://example.com",
+      "message": "Page is missing Cross-Origin-Embedder-Policy (COEP) header.",
+      "recommendation": "Add `Cross-Origin-Embedder-Policy: require-corp` to prevent loading resources without explicit permission.",
+      "documentationLink": "https://seocore.dev/docs/rules/security-headers"
+    },
+    {
+      "id": "security-headers:aHR0cHM6Ly9leGFt:jqed73",
+      "ruleId": "security-headers",
+      "subCheck": "missing-corp",
+      "severity": "warning",
+      "category": "security",
+      "url": "https://example.com",
+      "message": "Page is missing Cross-Origin-Resource-Policy (CORP) header.",
+      "recommendation": "Add `Cross-Origin-Resource-Policy: same-origin` or `same-site` to control which origins can load your resources.",
+      "documentationLink": "https://seocore.dev/docs/rules/security-headers"
+    },
+    {
+      "id": "mobile-performance:performance-capped",
+      "ruleId": "mobile-performance",
+      "severity": "info",
+      "category": "mobile_seo",
+      "url": "https://example.com",
+      "message": "Performance capped at 50 — real metrics unavailable",
+      "recommendation": "Enable Playwright crawl to unlock full performance scores."
+    }
+  ],
+  "pagesAudited": 1,
+  "totalLoadTimeMs": 106,
+  "pages": {
+    "https://example.com": {
+      "url": "https://example.com",
+      "statusCode": 200,
+      "loadTimeMs": 48,
+      "contentType": "text/html",
+      "headers": {
+        "age": "7",
+        "allow": "GET, HEAD",
+        "cf-cache-status": "HIT",
+        "cf-ray": "a01956c49dd91bd5-SIN",
+        "connection": "keep-alive",
+        "content-encoding": "br",
+        "content-type": "text/html",
+        "date": "Tue, 26 May 2026 02:27:07 GMT",
+        "last-modified": "Fri, 22 May 2026 08:22:30 GMT",
+        "server": "cloudflare",
+        "transfer-encoding": "chunked"
+      },
+      "html": "<!doctype html><html lang=\"en\"><head><title>Example Domain</title><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><style>body{background:#eee;width:60vw;margin:15vh auto;font-family:system-ui,sans-serif}h1{font-size:1.5em}div{opacity:0.8}a:link,a:visited{color:#348}</style></head><body><div><h1>Example Domain</h1><p>This domain is for use in documentation examples without needing permission. Avoid use in operations.</p><p><a href=\"https://iana.org/domains/example\">Learn more</a></p></div></body></html>\n",
+      "headings": {
+        "h1": [
+          "Example Domain"
+        ],
+        "h2": [],
+        "h3": []
+      },
+      "links": [
+        {
+          "url": "https://iana.org/domains/example",
+          "text": "Learn more",
+          "isInternal": false
+        }
+      ],
+      "images": [],
+      "hreflang": [],
+      "structuredData": [],
+      "redirectChain": [],
+      "title": "Example Domain",
+      "viewport": "width=device-width, initial-scale=1",
+      "resources": {
+        "pageSizeBytes": 528,
+        "jsSizeBytes": 0,
+        "cssSizeBytes": 0,
+        "imageSizeBytes": 0,
+        "otherSizeBytes": 0,
+        "jsRequests": 0,
+        "cssRequests": 0,
+        "imageRequests": 0,
+        "totalRequests": 1
+      },
+      "coreWebVitals": {
+        "lcp": 53,
+        "cls": 0,
+        "inp": 80
+      },
+      "performanceScore": 100,
+      "depth": 1,
+      "robotsTxtFound": false,
+      "sitemapXmlFound": false,
+      "inDegree": 0,
+      "outDegree": 0,
+      "isOrphan": false,
+      "authorityScore": 100
+    }
+  },
+  "crawlGraph": {
+    "nodes": [
+      {
+        "url": "https://example.com",
+        "depth": 1,
+        "isOrphan": false,
+        "inDegree": 0,
+        "outDegree": 0,
+        "authorityScore": 100
+      }
+    ],
+    "edges": [],
+    "metrics": {
+      "maxDepth": 1,
+      "orphanCount": 0,
+      "hubPages": [
+        {
+          "url": "https://example.com",
+          "outDegree": 0
+        }
+      ],
+      "authorityNodes": [
+        {
+          "url": "https://example.com",
+          "inDegree": 0
+        }
+      ]
+    }
+  }
+}

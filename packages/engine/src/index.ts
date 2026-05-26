@@ -10,7 +10,9 @@ import {
   ExecutionTier,
   ExecutionTierConfig,
   TIER_PRESETS,
-  DataSource
+  DataSource,
+  Category,
+  ModuleActivation,
 } from '@seocore/sdk';
 import { resolveConfig } from '@seocore/config';
 import { DefaultPluginRegistry, loadPluginsForTier } from './plugin-registry.js';
@@ -18,7 +20,7 @@ import PQueue from 'p-queue';
 import Bottleneck from 'bottleneck';
 import { HttpCrawler, PlaywrightCrawler, LighthouseCrawler, RobotsTxt, SitemapParser, CrawlerRegistry, createDefaultRegistry } from '@seocore/crawler';
 import { PageNormalizer } from '@seocore/analyzers';
-import { RuleEngine } from '@seocore/rules';
+import { createDefaultRuleEngine, type RuleEngine } from '@seocore/rules-core';
 import { ScoringEngine, CrawlGraphBuilder } from '@seocore/scoring-core';
 
 function patternToRegex(pattern: string): RegExp {
@@ -42,10 +44,29 @@ export function isUrlMatch(url: string, patterns: string[]): boolean {
   }
 }
 
+function getCategoriesForModules(modules: ModuleActivation): Category[] {
+  const categories = new Set<Category>();
+
+  if (modules.core) {
+    categories.add('seo');
+    categories.add('metadata');
+    categories.add('indexing');
+    categories.add('links');
+    categories.add('accessibility');
+  }
+  if (modules.performance) categories.add('performance');
+  if (modules.mobile) categories.add('mobile_seo');
+  if (modules.aiVisibility) categories.add('ai_visibility');
+  if (modules.security) categories.add('security');
+  if (modules.backlinks) categories.add('backlink_intelligence');
+  if (modules.hreflang) categories.add('indexing');
+
+  return [...categories];
+}
+
 export class SeoEngine {
   private readonly eventBus: EventBus;
   private readonly crawlerRegistry: CrawlerRegistry;
-  private readonly ruleEngine: RuleEngine;
   private readonly pluginRegistry: DefaultPluginRegistry;
 
   constructor(
@@ -54,18 +75,48 @@ export class SeoEngine {
     pluginRegistry?: DefaultPluginRegistry
   ) {
     this.eventBus = eventBus;
-    this.ruleEngine = new RuleEngine();
     this.crawlerRegistry = crawlerRegistry ?? createDefaultRegistry();
     this.pluginRegistry = pluginRegistry ?? new DefaultPluginRegistry();
   }
 
   registerPlugin(plugin: SeoPlugin): void {
     this.pluginRegistry.register(plugin);
-    if (plugin.rules) {
-      for (const rule of plugin.rules) {
-        this.ruleEngine.registerRule(rule);
-      }
+  }
+
+  private async createRuleEngine(tierConfig?: ExecutionTierConfig): Promise<RuleEngine> {
+    const ruleEngine = createDefaultRuleEngine();
+
+    if (tierConfig?.modules.performance) {
+      const { getPerformanceRules } = await import('@seocore/rules-performance');
+      ruleEngine.registerRules(getPerformanceRules());
     }
+
+    if (tierConfig?.modules.mobile) {
+      const { getMobileRules } = await import('@seocore/rules-mobile');
+      ruleEngine.registerRules(getMobileRules());
+    }
+
+    if (tierConfig?.modules.aiVisibility) {
+      const { getAiVisibilityRules } = await import('@seocore/rules-ai-visibility');
+      ruleEngine.registerRules(getAiVisibilityRules());
+    }
+
+    if (tierConfig?.modules.security !== false) {
+      const { getSecurityRules } = await import('@seocore/rules-security');
+      ruleEngine.registerRules(getSecurityRules());
+    }
+
+    if (tierConfig?.modules.hreflang) {
+      const { getHreflangRules } = await import('@seocore/rules-hreflang');
+      ruleEngine.registerRules(getHreflangRules());
+    }
+
+    const pluginRules = this.pluginRegistry.getRules();
+    if (pluginRules.length > 0) {
+      ruleEngine.registerRules(pluginRules);
+    }
+
+    return ruleEngine;
   }
 
   async run(startUrl: string, partialConfig: Partial<SeoConfig> = {}, tier?: ExecutionTier): Promise<AuditResult> {
@@ -101,6 +152,20 @@ export class SeoEngine {
         playwrightEnabled: tierConfig.crawl.playwrightEnabled,
         lighthouseEnabled: tierConfig.crawl.lighthouseEnabled
       };
+      if (config.modules) {
+        const mergedModules = {
+          ...tierConfig.modules,
+          ...config.modules,
+        };
+        tierConfig = {
+          ...tierConfig,
+          modules: mergedModules,
+          ruleFilter: {
+            ...tierConfig.ruleFilter,
+            categories: getCategoriesForModules(mergedModules),
+          },
+        };
+      }
       const autoPlugins = await loadPluginsForTier(tierConfig);
       for (const p of autoPlugins) {
         this.registerPlugin(p);
@@ -256,8 +321,10 @@ export class SeoEngine {
     const backlinkData = backlinksDS?.data as BacklinkIntelligenceData | undefined;
     const backlinkError = backlinksDS?.status === 'error' ? backlinksDS.error : undefined;
 
+    const ruleEngine = await this.createRuleEngine(tierConfig);
+
     // 3. Evaluate SEO rules
-    let findings = await this.ruleEngine.run(pages, config, dataSources, tierConfig, backlinkData, backlinkError);
+    let findings = await ruleEngine.run(pages, config, dataSources, tierConfig, backlinkData, backlinkError);
 
     // 4. Run lifecycle hook: onAfterAnalysis (allowing mutations)
     findings = await this.pluginRegistry.runMutationHook('onAfterAnalysis', findings);
@@ -265,7 +332,7 @@ export class SeoEngine {
     await this.eventBus.emit('analyzer:completed', { url: startUrl, findingsCount: findings.length });
 
     // 5. Calculate score
-    const ruleDefs: RuleDefinition[] = this.ruleEngine.getRules(config, tierConfig).map((r) => r.definition);
+    const ruleDefs: RuleDefinition[] = ruleEngine.getRules(config, tierConfig).map((r) => r.definition);
     const scoringResult = ScoringEngine.calculate({
       findings,
       pagesAudited: visited.size,

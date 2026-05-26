@@ -1,13 +1,9 @@
-import { fetchSite } from './fetcher.js';
-import { check as checkMeta } from './checkers/meta.js';
-import { check as checkSchema } from './checkers/schema.js';
-import { check as checkContent } from './checkers/content.js';
-import { check as checkCrawlability } from './checkers/crawlability.js';
-import { check as checkCitations } from './checkers/citations.js';
-import { check as checkTopical } from './checkers/topical.js';
-import { score as calculateScore } from './scorer.js';
+import type { Finding } from '@seocore/sdk';
+import { SeoEngine } from '@seocore/engine';
+import { EventBus } from '@seocore/sdk';
+import { calculateAiScore } from '@seocore/scoring-core';
 import { report as generateReport } from './reporter.js';
-import { CheckResult } from './types.js';
+import type { CheckResult } from './types.js';
 import { Spinner } from '../utils/spinner.js';
 
 export interface AiVisibilityOptions {
@@ -26,6 +22,73 @@ export interface AiVisibilityResult {
   checkedAt: string;
 }
 
+function toGrade(score: number): string {
+  if (score >= 90) return 'A';
+  if (score >= 75) return 'B';
+  if (score >= 60) return 'C';
+  if (score >= 40) return 'D';
+  return 'F';
+}
+
+function collectIssues(findings: Finding[], ruleId: string): string[] {
+  return Array.from(new Set(findings.filter((finding) => finding.ruleId === ruleId).map((finding) => finding.message)));
+}
+
+function buildBreakdown(aiFindings: Finding[], pagesAudited: number): CheckResult[] {
+  const { subScores } = calculateAiScore(aiFindings, pagesAudited);
+
+  return [
+    {
+      dimension: 'Extractability',
+      score: subScores.extractability,
+      maxScore: 100,
+      weight: 17,
+      issues: collectIssues(aiFindings, 'ai-extractability'),
+      wins: collectIssues(aiFindings, 'ai-extractability').length === 0 ? ['Content is cleanly structured for AI extraction.'] : [],
+    },
+    {
+      dimension: 'Entity Clarity',
+      score: subScores.entityClarity,
+      maxScore: 100,
+      weight: 17,
+      issues: collectIssues(aiFindings, 'ai-entity-clarity'),
+      wins: collectIssues(aiFindings, 'ai-entity-clarity').length === 0 ? ['Entity identity is clearly defined.'] : [],
+    },
+    {
+      dimension: 'Citation Readiness',
+      score: subScores.citationReadiness,
+      maxScore: 100,
+      weight: 17,
+      issues: collectIssues(aiFindings, 'ai-citation-readiness'),
+      wins: collectIssues(aiFindings, 'ai-citation-readiness').length === 0 ? ['Citation and FAQ signals are present.'] : [],
+    },
+    {
+      dimension: 'Structural Organization',
+      score: subScores.structuralOrg,
+      maxScore: 100,
+      weight: 17,
+      issues: collectIssues(aiFindings, 'ai-structural-organization'),
+      wins: collectIssues(aiFindings, 'ai-structural-organization').length === 0 ? ['Content hierarchy is easy for AI systems to parse.'] : [],
+    },
+    {
+      dimension: 'Retrieval Friendliness',
+      score: subScores.retrievalFriendliness,
+      maxScore: 100,
+      weight: 16,
+      issues: collectIssues(aiFindings, 'ai-retrieval-friendliness'),
+      wins: collectIssues(aiFindings, 'ai-retrieval-friendliness').length === 0 ? ['Content chunks cleanly for retrieval systems.'] : [],
+    },
+    {
+      dimension: 'Authority Signals',
+      score: subScores.authoritySignals,
+      maxScore: 100,
+      weight: 16,
+      issues: collectIssues(aiFindings, 'ai-authority-signals'),
+      wins: collectIssues(aiFindings, 'ai-authority-signals').length === 0 ? ['Authority and trust signals are visible.'] : [],
+    },
+  ];
+}
+
 export async function runAiVisibility(
   url: string,
   options: AiVisibilityOptions = {}
@@ -39,37 +102,45 @@ export async function runAiVisibility(
     spinner.start();
   }
 
-  // 1. Fetch site html, robots, sitemap, llms.txt
-  const site = await fetchSite(url);
+  const engine = new SeoEngine(new EventBus());
+  const audit = await engine.run(
+    url,
+    {
+      preset: 'quick',
+      maxPages: 1,
+      maxDepth: 1,
+      modules: {
+        core: false,
+        performance: false,
+        mobile: false,
+        aiVisibility: true,
+        security: false,
+        backlinks: false,
+        hreflang: false,
+      },
+    },
+    'fast',
+  );
 
   if (spinner) {
     spinner.stop('AI visibility analysis complete.');
   }
 
-  // 2. Execute all checkers
-  const breakdown: CheckResult[] = [
-    checkMeta(site),
-    checkSchema(site),
-    checkContent(site),
-    checkCrawlability(site),
-    checkCitations(site),
-    checkTopical(site),
-  ];
+  const aiFindings = audit.findings.filter((finding) => finding.category === 'ai_visibility');
+  const breakdown = buildBreakdown(aiFindings, audit.pagesAudited);
+  const score = audit.categories.ai_visibility?.score ?? 0;
+  const grade = toGrade(score);
 
-  // 3. Score results
-  const scoreResult = calculateScore(breakdown);
-
-  // 4. Generate report
   const result = {
-    score: scoreResult.score,
-    grade: scoreResult.grade,
+    score,
+    grade,
     breakdown,
     url,
     checkedAt: new Date().toISOString(),
   };
 
   if (!options.silent) {
-    generateReport(url, scoreResult.score, scoreResult.grade, breakdown, jsonFlag, options);
+    generateReport(url, score, grade, breakdown, jsonFlag, options);
   }
 
   return result;

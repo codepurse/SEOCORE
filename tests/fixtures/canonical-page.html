@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SEOCORE Canonical Fixture Title Intentionally Longer Than Recommended Limit For Search Results</title>
+    <meta
+      name="description"
+      content="This canonical fixture description is intentionally verbose so meta-description length checks trigger while still describing page structure, schema, pagination, mixed content, and internal linking behavior for parity testing."
+    />
+    <meta name="robots" content="noindex,follow" />
+    <meta name="viewport" content="width=1280, initial-scale=1" />
+    <link rel="canonical" href="https://fixture.seocore.local/" />
+    <link rel="alternate" hreflang="en-GB" href="https://fixture.seocore.local/uk" />
+    <link rel="alternate" hreflang="bad_lang" href="https://fixture.seocore.local/global" />
+    <meta property="og:title" content="SEOCORE Fixture OpenGraph Title" />
+    <meta property="og:description" content="Fixture OpenGraph description." />
+    <meta property="og:image" content="https://fixture.seocore.local/og-cover.jpg" />
+    <meta name="twitter:title" content="SEOCORE Fixture Twitter Title" />
+    <meta name="twitter:description" content="Fixture Twitter description." />
+    <meta name="twitter:image" content="https://fixture.seocore.local/twitter-cover.jpg" />
+    <link rel="stylesheet" href="https://cdn.example.net/site.css" />
+    <script src="https://cdn.example.net/app.js"></script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "name": "SEOCORE Canonical Fixture"
+      }
+    </script>
+    <style>
+      body { margin: 0; font-family: Arial, sans-serif; }
+      .shell { width: 1280px; margin: 0 auto; }
+      .nav a { display: inline-block; margin-right: 16px; }
+      .hero img { width: 960px; }
+      .pagination a { padding: 6px 10px; }
+    </style>
+  </head>
+  <body>
+    <header class="shell">
+      <nav class="nav">
+        <a href="/">Home</a>
+        <a href="/duplicate">Duplicate</a>
+        <a href="/missing">Missing</a>
+        <a href="/sink">Authority Sink</a>
+        <a href="/category?page=2">Page Two</a>
+      </nav>
+    </header>
+    <div class="shell">
+      <h1>SEOCORE Fixture Main Heading</h1>
+      <h1>SEOCORE Fixture Secondary Heading</h1>
+      <p>
+        This fixture exists for deterministic parity checks. It keeps markup stable while exposing
+        enough SEO, AI visibility, mobile, security, and linking conditions to exercise rule output.
+      </p>
+      <p>
+        Content stays deliberately thin. Structure stays deliberately imperfect. Output should stay
+        mechanically identical while Phase 3 splits rule modules.
+      </p>
+      <div class="hero">
+        <img src="http://cdn.example.net/insecure-hero.jpg" />
+        <img src="/images/diagram.png" alt="Architecture diagram" />
+      </div>
+      <p><a href="/duplicate">Read duplicate fixture page</a></p>
+      <p><a href="/missing">Read missing fixture page</a></p>
+      <div class="pagination">
+        <a href="/category?page=1">1</a>
+        <a href="/category?page=2">2</a>
+        <a href="/category?page=3">3</a>
+      </div>
+      <form action="http://fixture.seocore.local/submit" method="post">
+        <input type="email" name="email" />
+        <button type="submit">Subscribe</button>
+      </form>
+    </div>
+    <footer class="shell">
+      <p>Footer content without trust links, citation links, or author profile references.</p>
+    </footer>
+  </body>
+</html>

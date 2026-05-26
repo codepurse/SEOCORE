@@ -22,9 +22,14 @@
       "@seocore/engine": ["packages/engine/src/index.ts"],
       "@seocore/rule-utils": ["packages/rule-utils/src/index.ts"],
       "@seocore/rules-core": ["packages/rules-core/src/index.ts"],
+      "@seocore/rules-performance": ["packages/rules-performance/src/index.ts"],
+      "@seocore/rules-mobile": ["packages/rules-mobile/src/index.ts"],
+      "@seocore/rules-ai-visibility": ["packages/rules-ai-visibility/src/index.ts"],
+      "@seocore/rules-security": ["packages/rules-security/src/index.ts"],
+      "@seocore/rules-hreflang": ["packages/rules-hreflang/src/index.ts"],
       "@seocore/scoring-core": ["packages/scoring-core/src/index.ts"],
       "@seocore/plugin-backlinks": ["packages/plugin-backlinks/src/index.ts"]
     }
   },
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "debug-rank-checker.ts", "debug-google-results.html"]
+  "exclude": ["node_modules", "dist", "tests/**", "**/*.test.ts", "debug-rank-checker.ts", "debug-google-results.html"]
 }

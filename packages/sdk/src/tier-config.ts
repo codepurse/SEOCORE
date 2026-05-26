@@ -17,6 +17,7 @@ export interface ModuleActivation {
   performance: boolean;
   mobile: boolean;
   aiVisibility: boolean;
+  security: boolean;
   backlinks: boolean;
   hreflang: boolean;
 }
@@ -84,6 +85,7 @@ export const TIER_PRESETS: Record<ExecutionTier, ExecutionTierConfig> = {
       performance: false,
       mobile: false,
       aiVisibility: false,
+      security: true,
       backlinks: false,
       hreflang: false,
     },
@@ -119,6 +121,7 @@ export const TIER_PRESETS: Record<ExecutionTier, ExecutionTierConfig> = {
       performance: true,
       mobile: true,
       aiVisibility: false,
+      security: true,
       backlinks: false,
       hreflang: false,
     },
@@ -149,6 +152,7 @@ export const TIER_PRESETS: Record<ExecutionTier, ExecutionTierConfig> = {
       performance: true,
       mobile: true,
       aiVisibility: true,
+      security: true,
       backlinks: false,
       hreflang: true,
     },
@@ -179,6 +183,7 @@ export const TIER_PRESETS: Record<ExecutionTier, ExecutionTierConfig> = {
       performance: true,
       mobile: true,
       aiVisibility: true,
+      security: true,
       backlinks: true,
       hreflang: true,
     },

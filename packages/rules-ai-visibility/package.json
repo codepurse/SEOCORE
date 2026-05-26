@@ -1,0 +1,16 @@
+{
+  "name": "@seocore/rules-ai-visibility",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@seocore/sdk": "*",
+    "@seocore/rule-utils": "*",
+    "cheerio": "^1.0.0-rc.12"
+  }
+}

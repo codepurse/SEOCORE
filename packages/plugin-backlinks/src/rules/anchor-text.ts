@@ -1,5 +1,5 @@
 import { Rule, RuleDefinition, RuleEvaluationContext, Finding, NormalizedPage, BacklinkIntelligenceData } from '@seocore/sdk';
-import { createFindingId, getRuleSettings, getPrimaryBacklinkPage } from '@seocore/rules';
+import { createFindingId, getRuleSettings, getPrimaryBacklinkPage } from '@seocore/rule-utils';
 
 export class AnchorTextOverOptimizationRule implements Rule {
   definition: RuleDefinition = {
@@ -7,6 +7,7 @@ export class AnchorTextOverOptimizationRule implements Rule {
     name: 'Potential Anchor Text Over-Optimization',
     description: 'Evaluates anchor text distribution and alerts on potential over-optimization patterns.',
     category: 'backlink_intelligence',
+    module: 'backlinks',
     defaultSeverity: 'warning',
     defaultWeight: 5,
     documentationLink: 'https://seocore.dev/docs/rules/anchor-text-over-optimization',

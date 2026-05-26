@@ -3,10 +3,10 @@
 import { Command } from 'commander';
 import pc from 'picocolors';
 import { SeoEngine } from '@seocore/engine';
-import { EventBus, Severity, AuditPreset, Category, Backlink, AuditResult, ExecutionTier, TIER_PRESETS } from '@seocore/sdk';
+import { EventBus, Severity, AuditPreset, Backlink, AuditResult, ExecutionTier, TIER_PRESETS, ModuleActivation, Rule } from '@seocore/sdk';
 import { TerminalReporter, JsonReporter, HtmlReporter, SarifReporter, CompareEngine } from '@seocore/reporter';
 import { initConfigFile, resolveConfig } from '@seocore/config';
-import { RuleEngine } from '@seocore/rules';
+import { getRuleSettings } from '@seocore/rule-utils';
 import { createBacklinkClient } from '@seocore/backlinks';
 import { Spinner } from './utils/spinner.js';
 import inquirer from 'inquirer';
@@ -14,6 +14,88 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const program = new Command();
+
+function parseModuleOverride(input?: string): Partial<ModuleActivation> | undefined {
+  if (!input) {
+    return undefined;
+  }
+
+  const normalized = input
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  const aliasMap: Record<string, keyof ModuleActivation> = {
+    core: 'core',
+    performance: 'performance',
+    mobile: 'mobile',
+    ai_visibility: 'aiVisibility',
+    aiVisibility: 'aiVisibility',
+    security: 'security',
+    backlinks: 'backlinks',
+    hreflang: 'hreflang',
+  };
+
+  const invalid = normalized.filter((entry) => !aliasMap[entry]);
+  if (invalid.length > 0) {
+    throw new Error(`Invalid module override: ${invalid.join(', ')}`);
+  }
+
+  const modules: ModuleActivation = {
+    core: false,
+    performance: false,
+    mobile: false,
+    aiVisibility: false,
+    security: false,
+    backlinks: false,
+    hreflang: false,
+  };
+
+  for (const entry of normalized) {
+    modules[aliasMap[entry]] = true;
+  }
+
+  return modules;
+}
+
+async function loadRegisteredRules(): Promise<Rule[]> {
+  const [
+    { getCoreRules },
+    { getPerformanceRules },
+    { getMobileRules },
+    { getAiVisibilityRules },
+    { getSecurityRules },
+    { getHreflangRules },
+  ] = await Promise.all([
+    import('@seocore/rules-core'),
+    import('@seocore/rules-performance'),
+    import('@seocore/rules-mobile'),
+    import('@seocore/rules-ai-visibility'),
+    import('@seocore/rules-security'),
+    import('@seocore/rules-hreflang'),
+  ]);
+
+  const rules = [
+    ...getCoreRules(),
+    ...getPerformanceRules(),
+    ...getMobileRules(),
+    ...getAiVisibilityRules(),
+    ...getSecurityRules(),
+    ...getHreflangRules(),
+  ];
+
+  try {
+    const { createBacklinkPlugin } = await import('@seocore/plugin-backlinks');
+    const backlinkPlugin = createBacklinkPlugin();
+    if (backlinkPlugin.rules) {
+      rules.push(...backlinkPlugin.rules);
+    }
+  } catch {
+    // Backlink plugin is optional for rule listing.
+  }
+
+  return rules;
+}
 
 program
   .name('seocore')
@@ -50,6 +132,7 @@ program
   .option('--budget-cls <number>', 'Cumulative Layout Shift budget')
   .option('--budget-inp <ms>', 'Interaction to Next Paint budget in ms')
   .option('--budget-js <bytes>', 'Total JavaScript payload budget')
+  .option('--module <modules>', 'Comma-separated module override: core,performance,mobile,ai_visibility,security,backlinks,hreflang')
   .action(async (url, options) => {
     try {
       // Validate starting URL protocol
@@ -82,6 +165,7 @@ program
       if (options.include) partialConfig.includePatterns = options.include;
       if (options.playwright) partialConfig.playwrightEnabled = true;
       if (options.lighthouseSample !== undefined) partialConfig.lighthouseSampleCount = options.lighthouseSample;
+      if (options.module) partialConfig.modules = parseModuleOverride(options.module);
       
       // Check if we need to prompt about Lighthouse for full scans (only if not in CI mode)
       let useLighthouse = options.lighthouse;
@@ -145,38 +229,6 @@ program
       const engine = new SeoEngine(eventBus);
       const result = await engine.run(url, partialConfig, tier);
 
-      let aiVisBreakdown: any = null;
-      try {
-        const { runAiVisibility } = await import('./ai-visibility/index.js');
-        const aiVis = await runAiVisibility(url, { silent: true });
-        aiVisBreakdown = aiVis.breakdown;
-
-        if (aiVis && result.categories.ai_visibility) {
-          // Override category score with the granular AI-vis result
-          result.categories.ai_visibility.score = aiVis.score;
-          result.categories.ai_visibility.totalDeductions =
-            Math.round((100 - aiVis.score) * 10) / 10;
-
-          // Re-aggregate using the SAME tier weights the audit used (no duplicate constants)
-          const activeTier = tier ?? 'standard';
-          const tierConfig = TIER_PRESETS[activeTier];
-          const weights = tierConfig.scoring.categoryWeights;
-
-          let weightedSum = 0;
-          let weightTotal = 0;
-          for (const cat of Object.keys(result.categories) as Category[]) {
-            const w = weights[cat];
-            if (w !== undefined) {
-              weightedSum += result.categories[cat].score * w;
-              weightTotal += w;
-            }
-          }
-          result.score = weightTotal > 0 ? Math.round(weightedSum / weightTotal) : 100;
-        }
-      } catch {
-        // Fail gracefully — keep base score
-      }
-
       // Export JSON if requested
       if (options.format === 'json' || options.format === 'both' || options.format === 'all') {
         const outPath = options.output && options.output.endsWith('.json') ? options.output : './seocore-report.json';
@@ -203,7 +255,7 @@ program
         TerminalReporter.report(result, {
           verbose: options.verbose,
           minSeverity: options.minSeverity as Severity,
-        }, aiVisBreakdown);
+        });
       }
 
       // CI Mode: Check for failures and exit codes
@@ -379,10 +431,9 @@ program
 program
   .command('rules:list')
   .description('List all available declarative SEO validation rules')
-  .action(() => {
+  .action(async () => {
     const config = resolveConfig();
-    const ruleEngine = new RuleEngine();
-    const rules = ruleEngine.getRules(config);
+    const rules = (await loadRegisteredRules()).filter((rule) => getRuleSettings(rule.definition, config).enabled);
 
     console.log(pc.bold(pc.cyan(`\nSEOCORE REGISTERED RULES (${rules.length} total):`)));
     console.log(pc.gray('─────────────────────────────────────────────────────────────────────────────────'));
@@ -1144,39 +1195,6 @@ program
             maxPages: 1, // Default to single page for quick comparison
             maxDepth: 1
           });
-
-          // Update AI visibility score
-          try {
-            const { runAiVisibility } = await import('./ai-visibility/index.js');
-            const aiVisResult = await runAiVisibility(source, { silent: true });
-            if (result.categories && result.categories.ai_visibility) {
-              result.categories.ai_visibility.score = aiVisResult.score;
-              result.categories.ai_visibility.totalDeductions = Math.round((100 - aiVisResult.score) * 10) / 10;
-              
-              const CATEGORY_WEIGHTS: Record<string, number> = {
-                indexing: 0.15,
-                metadata: 0.15,
-                links: 0.10,
-                seo: 0.10,
-                ai_visibility: 0.15,
-                accessibility: 0.10,
-                performance: 0.10,
-                mobile_seo: 0.15,
-                backlink_intelligence: 0.10,
-              };
-              
-              let weightedSum = 0;
-              let weightTotal = 0;
-              for (const cat of Object.keys(result.categories)) {
-                const catTyped = cat as Category;
-                const catWeight = CATEGORY_WEIGHTS[catTyped] ?? 0;
-                weightedSum += result.categories[catTyped].score * catWeight;
-                weightTotal += catWeight;
-              }
-              result.score = weightTotal > 0 ? Math.round(weightedSum / weightTotal) : 100;
-            }
-          } catch {}
-
           return result;
         } else {
           // Read from file

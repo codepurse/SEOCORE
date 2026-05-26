@@ -1,4 +1,4 @@
-import { ExecutionTier } from './tier-config.js';
+import type { ExecutionTier, ModuleActivation } from './tier-config.js';
 
 // ==========================================
 // CORE MODEL SCHEMA & TYPES
@@ -94,6 +94,7 @@ export type Category = 'seo' | 'performance' | 'accessibility' | 'indexing' | 'l
 export interface Finding {
   id: string; // ruleId:url-hash
   ruleId: string;
+  subCheck?: string;
   severity: Severity;
   category: Category;
   url: string;
@@ -166,6 +167,7 @@ export interface BacklinkIntelligenceData {
 export interface SeoConfig {
   preset: AuditPreset;
   tier?: ExecutionTier;
+  modules?: Partial<ModuleActivation>;
   concurrency: number;
   maxDepth: number;
   maxPages: number;
@@ -235,11 +237,27 @@ export interface AuditResult {
 // RULE INTERFACES
 // ==========================================
 
+export type RuleModule =
+  | 'core'
+  | 'performance'
+  | 'mobile'
+  | 'ai_visibility'
+  | 'security'
+  | 'eeat'
+  | 'hreflang'
+  | 'backlinks';
+
 export interface RuleDefinition {
   id: string;
   name: string;
   description: string;
   category: Category;
+  /**
+   * Optional during Phase 3 migration. Omitted rules default to `core`.
+   */
+  module?: RuleModule;
+  tier?: ExecutionTier[];
+  requires?: ('playwright' | 'lighthouse' | 'network')[];
   defaultSeverity: Severity;
   defaultWeight: number; // 1-10 used for score calculation
   documentationLink?: string;

@@ -1,5 +1,5 @@
 import { Rule, RuleDefinition, RuleEvaluationContext, Finding, NormalizedPage, BacklinkIntelligenceData } from '@seocore/sdk';
-import { createFindingId, getRuleSettings, hasConfiguredBacklinkSources, getPrimaryBacklinkPage } from '@seocore/rules';
+import { createFindingId, getRuleSettings, hasConfiguredBacklinkSources, getPrimaryBacklinkPage } from '@seocore/rule-utils';
 
 export class MissingBacklinkDataRule implements Rule {
   definition: RuleDefinition = {
@@ -7,6 +7,7 @@ export class MissingBacklinkDataRule implements Rule {
     name: 'Missing Backlink Intelligence Data',
     description: 'Alerts when external backlink data sources are not configured, falling back to mock analysis mode.',
     category: 'backlink_intelligence',
+    module: 'backlinks',
     defaultSeverity: 'info',
     defaultWeight: 2,
     documentationLink: 'https://seocore.dev/docs/rules/missing-backlink-data',

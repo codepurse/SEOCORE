@@ -1,10 +1,23 @@
 import type { Finding } from '@seocore/sdk';
+import {
+  MOBILE_INDEXING_READINESS_SUBCHECKS,
+  MOBILE_PERFORMANCE_SUBCHECKS,
+  MOBILE_RESPONSIVE_DESIGN_SUBCHECKS,
+  MOBILE_USABILITY_SUBCHECKS,
+} from '@seocore/rules-mobile';
 
 export interface MobileSubScores {
   usability: number;
   performance: number;
   responsive: number;
   indexing: number;
+}
+
+function hasMobileSignal(findings: Finding[], ...signals: string[]): boolean {
+  return findings.some((finding) => {
+    const subCheck = finding.subCheck ?? '';
+    return signals.some((signal) => subCheck === signal || finding.id.includes(signal));
+  });
 }
 
 export function calculateMobileScore(findings: Finding[], pagesAudited: number): { score: number; subScores: MobileSubScores } {
@@ -14,33 +27,33 @@ export function calculateMobileScore(findings: Finding[], pagesAudited: number):
   let usabilityScore = 0;
   
   let viewportScore = 40;
-  if (mobileFindings.some(f => f.id.includes('missing-viewport') || f.id.includes('unverifiable-usability'))) {
+  if (hasMobileSignal(mobileFindings, MOBILE_USABILITY_SUBCHECKS.MISSING_VIEWPORT, MOBILE_USABILITY_SUBCHECKS.UNVERIFIABLE_USABILITY)) {
     viewportScore = 0;
-  } else if (mobileFindings.some(f => f.id.includes('invalid-viewport'))) {
+  } else if (hasMobileSignal(mobileFindings, MOBILE_USABILITY_SUBCHECKS.INVALID_VIEWPORT)) {
     viewportScore = 20 / scale;
   }
   usabilityScore += viewportScore;
 
   let layoutScore = 20;
-  if (mobileFindings.some(f => f.id.includes('no-inline-styles') || f.id.includes('unverifiable-usability'))) {
+  if (hasMobileSignal(mobileFindings, MOBILE_USABILITY_SUBCHECKS.NO_INLINE_STYLES, MOBILE_USABILITY_SUBCHECKS.UNVERIFIABLE_USABILITY)) {
     layoutScore = 0;
-  } else if (mobileFindings.some(f => f.id.includes('fixed-width'))) {
+  } else if (hasMobileSignal(mobileFindings, MOBILE_USABILITY_SUBCHECKS.FIXED_WIDTH)) {
     layoutScore = 0;
   }
   usabilityScore += layoutScore;
 
   let navigationScore = 15;
-  if (mobileFindings.some(f => f.id.includes('no-nav-element') || f.id.includes('unverifiable-usability'))) {
+  if (hasMobileSignal(mobileFindings, MOBILE_USABILITY_SUBCHECKS.NO_NAV_ELEMENT, MOBILE_USABILITY_SUBCHECKS.UNVERIFIABLE_USABILITY)) {
     navigationScore = 0;
-  } else if (mobileFindings.some(f => f.id.includes('poor-navigation'))) {
+  } else if (hasMobileSignal(mobileFindings, MOBILE_USABILITY_SUBCHECKS.POOR_NAVIGATION)) {
     navigationScore = 5 / scale;
   }
   usabilityScore += navigationScore;
 
   let tapTargetsScore = 25;
-  if (mobileFindings.some(f => f.id.includes('no-tap-targets') || f.id.includes('unverifiable-usability'))) {
+  if (hasMobileSignal(mobileFindings, MOBILE_USABILITY_SUBCHECKS.NO_TAP_TARGETS, MOBILE_USABILITY_SUBCHECKS.UNVERIFIABLE_USABILITY)) {
     tapTargetsScore = 0;
-  } else if (mobileFindings.some(f => f.id.includes('tap-target'))) {
+  } else if (hasMobileSignal(mobileFindings, MOBILE_USABILITY_SUBCHECKS.TAP_TARGET)) {
     tapTargetsScore = 10 / scale;
   }
   usabilityScore += tapTargetsScore;
@@ -49,51 +62,51 @@ export function calculateMobileScore(findings: Finding[], pagesAudited: number):
   let performanceScore = 0;
 
   let lcpScore = 35;
-  if (mobileFindings.some(f => f.id.includes('unverifiable-lcp') || f.id.includes('unverifiable-performance'))) {
+  if (hasMobileSignal(mobileFindings, MOBILE_PERFORMANCE_SUBCHECKS.UNVERIFIABLE_LCP, 'unverifiable-performance')) {
     lcpScore = 0;
-  } else if (mobileFindings.some(f => f.id.includes('poor-lcp'))) {
+  } else if (hasMobileSignal(mobileFindings, MOBILE_PERFORMANCE_SUBCHECKS.POOR_LCP)) {
     lcpScore = 5 / scale;
-  } else if (mobileFindings.some(f => f.id.includes('needs-improvement-lcp'))) {
+  } else if (hasMobileSignal(mobileFindings, MOBILE_PERFORMANCE_SUBCHECKS.NEEDS_IMPROVEMENT_LCP)) {
     lcpScore = 15 / scale;
   }
   performanceScore += lcpScore;
 
   let clsScore = 25;
-  if (mobileFindings.some(f => f.id.includes('unverifiable-cls') || f.id.includes('unverifiable-performance'))) {
+  if (hasMobileSignal(mobileFindings, MOBILE_PERFORMANCE_SUBCHECKS.UNVERIFIABLE_CLS, 'unverifiable-performance')) {
     clsScore = 0;
-  } else if (mobileFindings.some(f => f.id.includes('poor-cls'))) {
+  } else if (hasMobileSignal(mobileFindings, MOBILE_PERFORMANCE_SUBCHECKS.POOR_CLS)) {
     clsScore = 5 / scale;
-  } else if (mobileFindings.some(f => f.id.includes('needs-improvement-cls'))) {
+  } else if (hasMobileSignal(mobileFindings, MOBILE_PERFORMANCE_SUBCHECKS.NEEDS_IMPROVEMENT_CLS)) {
     clsScore = 10 / scale;
   }
   performanceScore += clsScore;
 
   let jsExecutionScore = 15;
-  if (mobileFindings.some(f => f.id.includes('unverifiable-js-execution') || f.id.includes('unverifiable-performance'))) {
+  if (hasMobileSignal(mobileFindings, MOBILE_PERFORMANCE_SUBCHECKS.UNVERIFIABLE_JS_EXECUTION, 'unverifiable-performance')) {
     jsExecutionScore = 0;
-  } else if (mobileFindings.some(f => f.id.includes('excessive-js'))) {
+  } else if (hasMobileSignal(mobileFindings, MOBILE_PERFORMANCE_SUBCHECKS.EXCESSIVE_JS)) {
     jsExecutionScore = 0;
-  } else if (mobileFindings.some(f => f.id.includes('heavy-js'))) {
+  } else if (hasMobileSignal(mobileFindings, MOBILE_PERFORMANCE_SUBCHECKS.HEAVY_JS)) {
     jsExecutionScore = 5 / scale;
   }
   performanceScore += jsExecutionScore;
 
   let imageLoadScore = 15;
-  if (mobileFindings.some(f => f.id.includes('no-images-found') || f.id.includes('unverifiable-image-load') || f.id.includes('unverifiable-performance'))) {
+  if (hasMobileSignal(mobileFindings, MOBILE_PERFORMANCE_SUBCHECKS.NO_IMAGES_FOUND, MOBILE_PERFORMANCE_SUBCHECKS.UNVERIFIABLE_IMAGE_LOAD, 'unverifiable-performance')) {
     imageLoadScore = 0;
-  } else if (mobileFindings.some(f => f.id.includes('heavy-images'))) {
+  } else if (hasMobileSignal(mobileFindings, MOBILE_PERFORMANCE_SUBCHECKS.HEAVY_IMAGES)) {
     imageLoadScore = 5 / scale;
   }
   performanceScore += imageLoadScore;
 
   let renderBlockingScore = 10;
-  if (mobileFindings.some(f => f.id.includes('render-blocking'))) {
+  if (hasMobileSignal(mobileFindings, MOBILE_PERFORMANCE_SUBCHECKS.RENDER_BLOCKING)) {
     renderBlockingScore = 5 / scale;
   }
   performanceScore += renderBlockingScore;
 
 
-  const hasUnverifiablePerf = mobileFindings.some(f => f.id.includes('unverifiable-performance') || f.id.includes('unverifiable-lcp'));
+  const hasUnverifiablePerf = hasMobileSignal(mobileFindings, 'unverifiable-performance', MOBILE_PERFORMANCE_SUBCHECKS.UNVERIFIABLE_LCP);
   const hasRealPerfData = !hasUnverifiablePerf;
   
   const rawPerfScore = performanceScore;
@@ -116,19 +129,19 @@ export function calculateMobileScore(findings: Finding[], pagesAudited: number):
   let responsiveScore = 0;
 
   let mediaQueriesScore = 50;
-  if (mobileFindings.some(f => f.id.includes('missing-media-queries'))) {
+  if (hasMobileSignal(mobileFindings, MOBILE_RESPONSIVE_DESIGN_SUBCHECKS.MISSING_MEDIA_QUERIES)) {
     mediaQueriesScore = 0;
   }
   responsiveScore += mediaQueriesScore;
 
   let layoutContainersScore = 25;
-  if (mobileFindings.some(f => f.id.includes('no-inline-styles') || f.id.includes('fixed-layout'))) {
+  if (hasMobileSignal(mobileFindings, MOBILE_USABILITY_SUBCHECKS.NO_INLINE_STYLES, MOBILE_RESPONSIVE_DESIGN_SUBCHECKS.FIXED_LAYOUT)) {
     layoutContainersScore = 0;
   }
   responsiveScore += layoutContainersScore;
 
   let breakpointsScore = 25;
-  if (mobileFindings.some(f => f.id.includes('missing-breakpoints') || f.id.includes('unverifiable-breakpoints'))) {
+  if (hasMobileSignal(mobileFindings, MOBILE_RESPONSIVE_DESIGN_SUBCHECKS.MISSING_BREAKPOINTS, MOBILE_RESPONSIVE_DESIGN_SUBCHECKS.UNVERIFIABLE_BREAKPOINTS)) {
     breakpointsScore = 0;
   }
   responsiveScore += breakpointsScore;
@@ -137,21 +150,21 @@ export function calculateMobileScore(findings: Finding[], pagesAudited: number):
   let indexingScore = 0;
 
   let contentParityScore = 40;
-  if (mobileFindings.some(f => f.id.includes('hidden-content'))) {
+  if (hasMobileSignal(mobileFindings, MOBILE_INDEXING_READINESS_SUBCHECKS.HIDDEN_CONTENT)) {
     contentParityScore = 0;
   }
   indexingScore += contentParityScore;
 
   let schemaScore = 40;
-  if (mobileFindings.some(f => f.id.includes('missing-schema'))) {
+  if (hasMobileSignal(mobileFindings, MOBILE_INDEXING_READINESS_SUBCHECKS.MISSING_SCHEMA)) {
     schemaScore = 0;
   }
   indexingScore += schemaScore;
 
   let canonicalScore = 20;
-  if (mobileFindings.some(f => f.id.includes('missing-canonical'))) {
+  if (hasMobileSignal(mobileFindings, MOBILE_INDEXING_READINESS_SUBCHECKS.MISSING_CANONICAL)) {
     canonicalScore = 0;
-  } else if (mobileFindings.some(f => f.id.includes('canonical-mismatch'))) {
+  } else if (hasMobileSignal(mobileFindings, MOBILE_INDEXING_READINESS_SUBCHECKS.CANONICAL_MISMATCH)) {
     canonicalScore = 10 / scale;
   }
   indexingScore += canonicalScore;

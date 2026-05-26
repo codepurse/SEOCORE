@@ -13,7 +13,13 @@
     "@seocore/config": "*",
     "@seocore/crawler": "*",
     "@seocore/analyzers": "*",
-    "@seocore/rules": "*",
+    "@seocore/plugin-backlinks": "*",
+    "@seocore/rules-core": "*",
+    "@seocore/rules-performance": "*",
+    "@seocore/rules-mobile": "*",
+    "@seocore/rules-ai-visibility": "*",
+    "@seocore/rules-security": "*",
+    "@seocore/rules-hreflang": "*",
     "@seocore/scoring-core": "*"
   }
 }

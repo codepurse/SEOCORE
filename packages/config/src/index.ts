@@ -46,10 +46,20 @@ const BacklinkApiConfigSchema = z.object({
 }).optional();
 
 const SeverityEnum = z.enum(['critical', 'error', 'warning', 'info']);
+const ModuleActivationOverrideSchema = z.object({
+  core: z.boolean().optional(),
+  performance: z.boolean().optional(),
+  mobile: z.boolean().optional(),
+  aiVisibility: z.boolean().optional(),
+  security: z.boolean().optional(),
+  backlinks: z.boolean().optional(),
+  hreflang: z.boolean().optional(),
+}).optional();
 
 export const SeoConfigSchema = z.object({
   preset: z.enum(['quick', 'standard', 'deep', 'enterprise']).default('standard'),
   tier: z.enum(['fast', 'standard', 'deep', 'enterprise']).optional(),
+  modules: ModuleActivationOverrideSchema,
   concurrency: z.number().int().positive().default(3),
   maxDepth: z.number().int().nonnegative().default(3),
   maxPages: z.number().int().positive().default(100),

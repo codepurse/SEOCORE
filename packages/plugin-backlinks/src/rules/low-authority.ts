@@ -1,5 +1,5 @@
 import { Rule, RuleDefinition, RuleEvaluationContext, Finding, NormalizedPage, BacklinkIntelligenceData } from '@seocore/sdk';
-import { createFindingId, getRuleSettings, getPrimaryBacklinkPage } from '@seocore/rules';
+import { createFindingId, getRuleSettings, getPrimaryBacklinkPage } from '@seocore/rule-utils';
 
 export class LowAuthorityBacklinksRule implements Rule {
   definition: RuleDefinition = {
@@ -7,6 +7,7 @@ export class LowAuthorityBacklinksRule implements Rule {
     name: 'Potential Low-Quality/Spammy Backlink Risk',
     description: 'Alerts to potential low-quality or toxic backlink risks.',
     category: 'backlink_intelligence',
+    module: 'backlinks',
     defaultSeverity: 'warning',
     defaultWeight: 4,
     documentationLink: 'https://seocore.dev/docs/rules/low-authority-backlinks',

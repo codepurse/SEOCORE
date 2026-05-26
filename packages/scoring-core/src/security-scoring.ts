@@ -1,4 +1,5 @@
 import type { Finding } from '@seocore/sdk';
+import { SECURITY_SUBCHECKS } from '@seocore/rules-security';
 
 export function calculateSecurityScore(findings: Finding[], pagesAudited: number, floors: Record<string, number>): number {
   const securityFindings = findings.filter(f => f.category === 'security');
@@ -10,7 +11,7 @@ export function calculateSecurityScore(findings: Finding[], pagesAudited: number
     
     for (const finding of securityFindings) {
       for (const [suffix, deduction] of Object.entries(suffixesWithDeduction)) {
-        if (finding.id.endsWith(`:${suffix}`) || finding.id.includes(`:${suffix}:`) || finding.ruleId === suffix) {
+        if (finding.subCheck === suffix || finding.id.endsWith(`:${suffix}`) || finding.id.includes(`:${suffix}:`) || finding.ruleId === suffix) {
           const currentMax = pagesWithFindings.get(finding.url) || 0;
           pagesWithFindings.set(finding.url, Math.max(currentMax, deduction));
         }
@@ -25,36 +26,36 @@ export function calculateSecurityScore(findings: Finding[], pagesAudited: number
     return Math.max(0, Math.min(100, 100 - scaledDeduction));
   };
 
-  const httpsScore = getSubScore({ 'not-https': 100 });
+  const httpsScore = getSubScore({ [SECURITY_SUBCHECKS.NOT_HTTPS]: 100 });
   const hstsScore = getSubScore({
-    'missing-hsts': 100,
-    'hsts-invalid': 60,
-    'hsts-short-max-age': 40,
-    'hsts-missing-subdomains': 30,
-    'hsts-missing-preload': 10
+    [SECURITY_SUBCHECKS.MISSING_HSTS]: 100,
+    [SECURITY_SUBCHECKS.HSTS_INVALID]: 60,
+    [SECURITY_SUBCHECKS.HSTS_SHORT_MAX_AGE]: 40,
+    [SECURITY_SUBCHECKS.HSTS_MISSING_SUBDOMAINS]: 30,
+    [SECURITY_SUBCHECKS.HSTS_MISSING_PRELOAD]: 10
   });
   const cspScore = getSubScore({
-    'missing-csp': 100,
-    'csp-report-only': 30,
-    'csp-unsafe-inline-script': 50,
-    'csp-unsafe-eval-script': 40,
-    'csp-script-src-wildcard': 40,
-    'csp-object-src-wildcard': 30,
-    'csp-missing-object-src': 20,
-    'csp-missing-default-src': 20,
-    'csp-missing-frame-ancestors': 10
+    [SECURITY_SUBCHECKS.MISSING_CSP]: 100,
+    [SECURITY_SUBCHECKS.CSP_REPORT_ONLY]: 30,
+    [SECURITY_SUBCHECKS.CSP_UNSAFE_INLINE_SCRIPT]: 50,
+    [SECURITY_SUBCHECKS.CSP_UNSAFE_EVAL_SCRIPT]: 40,
+    [SECURITY_SUBCHECKS.CSP_SCRIPT_SRC_WILDCARD]: 40,
+    [SECURITY_SUBCHECKS.CSP_OBJECT_SRC_WILDCARD]: 30,
+    [SECURITY_SUBCHECKS.CSP_MISSING_OBJECT_SRC]: 20,
+    [SECURITY_SUBCHECKS.CSP_MISSING_DEFAULT_SRC]: 20,
+    [SECURITY_SUBCHECKS.CSP_MISSING_FRAME_ANCESTORS]: 10
   });
   const xctoScore = getSubScore({
-    'missing-x-content-type-options': 100,
-    'invalid-x-content-type-options': 50
+    [SECURITY_SUBCHECKS.MISSING_X_CONTENT_TYPE_OPTIONS]: 100,
+    [SECURITY_SUBCHECKS.INVALID_X_CONTENT_TYPE_OPTIONS]: 50
   });
-  const xframeScore = getSubScore({ 'missing-x-frame-options': 100 });
-  const referrerScore = getSubScore({ 'missing-referrer-policy': 100 });
-  const permissionsScore = getSubScore({ 'missing-permissions-policy': 100 });
+  const xframeScore = getSubScore({ [SECURITY_SUBCHECKS.MISSING_X_FRAME_OPTIONS]: 100 });
+  const referrerScore = getSubScore({ [SECURITY_SUBCHECKS.MISSING_REFERRER_POLICY]: 100 });
+  const permissionsScore = getSubScore({ [SECURITY_SUBCHECKS.MISSING_PERMISSIONS_POLICY]: 100 });
   const coopCoepCorpScore = getSubScore({
-    'missing-coop': 35,
-    'missing-coep': 35,
-    'missing-corp': 30
+    [SECURITY_SUBCHECKS.MISSING_COOP]: 35,
+    [SECURITY_SUBCHECKS.MISSING_COEP]: 35,
+    [SECURITY_SUBCHECKS.MISSING_CORP]: 30
   });
 
   const calculatedSecurityScore = Math.round(

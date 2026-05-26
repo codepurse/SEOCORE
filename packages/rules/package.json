@@ -1,6 +1,7 @@
 {
   "name": "@seocore/rules",
   "version": "1.0.0",
+  "deprecated": "Use @seocore/rules-core, @seocore/rules-performance, @seocore/rules-mobile, @seocore/rules-ai-visibility, @seocore/rules-security, and @seocore/rules-hreflang.",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
@@ -9,7 +10,11 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@seocore/sdk": "*",
-    "@seocore/config": "*"
+    "@seocore/rules-core": "*",
+    "@seocore/rules-performance": "*",
+    "@seocore/rules-mobile": "*",
+    "@seocore/rules-ai-visibility": "*",
+    "@seocore/rules-security": "*",
+    "@seocore/rules-hreflang": "*"
   }
 }

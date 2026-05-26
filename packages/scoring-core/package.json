@@ -10,7 +10,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@seocore/sdk": "*"
+    "@seocore/sdk": "*",
+    "@seocore/rules-mobile": "*",
+    "@seocore/rules-ai-visibility": "*",
+    "@seocore/rules-security": "*"
   },
   "devDependencies": {
     "typescript": "^5.4.5",

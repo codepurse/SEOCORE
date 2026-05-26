@@ -49,6 +49,7 @@ export class DefaultPluginRegistry implements PluginRegistry {
     if (modules.performance) activeCategories.add('performance');
     if (modules.mobile) activeCategories.add('mobile_seo');
     if (modules.aiVisibility) activeCategories.add('ai_visibility');
+    if (modules.security) activeCategories.add('security');
     if (modules.backlinks) activeCategories.add('backlink_intelligence');
 
     return this.getRules().filter(rule => activeCategories.has(rule.definition.category));

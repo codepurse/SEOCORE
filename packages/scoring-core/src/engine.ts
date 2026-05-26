@@ -1,5 +1,6 @@
 import type { Category, CategoryScore, Finding, SeoConfig, Severity, RuleDefinition, ExecutionTierConfig } from '@seocore/sdk';
 import { DEFAULT_CATEGORY_WEIGHTS, DEFAULT_FLOOR_SCORES } from '@seocore/sdk';
+import { calculateAiScore } from './ai-scoring.js';
 import { calculateMobileScore } from './mobile-scoring.js';
 import { calculateSecurityScore } from './security-scoring.js';
 
@@ -71,6 +72,19 @@ export class ScoringEngine {
         const { score: calculatedMobileScore } = calculateMobileScore(findings, pagesAudited);
         categories.mobile_seo.score = calculatedMobileScore;
         categories.mobile_seo.totalDeductions = Math.round((100 - calculatedMobileScore) * 10) / 10;
+      }
+    }
+
+    if (categories.ai_visibility) {
+      const hasAiRules = ruleDefinitions.some(r => r.category === 'ai_visibility');
+      if (!hasAiRules) {
+        categories.ai_visibility.score = 100;
+        categories.ai_visibility.totalDeductions = 0;
+      } else {
+        const aiFindings = findings.filter((finding) => finding.category === 'ai_visibility');
+        const { score: calculatedAiScore } = calculateAiScore(aiFindings, pagesAudited);
+        categories.ai_visibility.score = calculatedAiScore;
+        categories.ai_visibility.totalDeductions = Math.round((100 - calculatedAiScore) * 10) / 10;
       }
     }
 
