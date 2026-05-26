@@ -12,6 +12,7 @@ export class SocialMetaRule implements Rule {
     defaultSeverity: 'warning',
     defaultWeight: 6,
     documentationLink: 'https://seocore.dev/docs/rules/social-meta',
+    stateless: true,
   };
 
   async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
@@ -130,6 +131,7 @@ export class ContentQualityRule implements Rule {
     defaultSeverity: 'warning',
     defaultWeight: 7,
     documentationLink: 'https://seocore.dev/docs/rules/content-quality',
+    stateless: true,
   };
 
   async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
@@ -194,6 +196,7 @@ export class InternalLinkingRule implements Rule {
     defaultSeverity: 'warning',
     defaultWeight: 5,
     documentationLink: 'https://seocore.dev/docs/rules/internal-linking',
+    stateless: true,
   };
 
   async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
@@ -261,6 +264,7 @@ export class PaginationHealthRule implements Rule {
     defaultSeverity: 'warning',
     defaultWeight: 6,
     documentationLink: 'https://seocore.dev/docs/rules/pagination-health',
+    stateless: true,
   };
 
   async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
@@ -366,55 +370,17 @@ export class DuplicateContentSimilarityRule implements Rule {
     documentationLink: 'https://seocore.dev/docs/rules/duplicate-content-similarity',
   };
 
-  private calculateSimilarity(text1: string, text2: string): number {
-    const words1 = text1.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-    const words2 = text2.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-
-    if (words1.length === 0 || words2.length === 0) return 0;
-
-    const freq1: Record<string, number> = {};
-    const freq2: Record<string, number> = {};
-
-    for (const word of words1) {
-      freq1[word] = (freq1[word] || 0) + 1;
-    }
-    for (const word of words2) {
-      freq2[word] = (freq2[word] || 0) + 1;
-    }
-
-    let intersection = 0;
-    for (const word of Object.keys(freq1)) {
-      if (freq2[word]) {
-        intersection += Math.min(freq1[word], freq2[word]);
-      }
-    }
-
-    const union = words1.length + words2.length - intersection;
-    return intersection / union;
-  }
-
   async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
     const { enabled } = getRuleSettings(this.definition, context.config);
-    if (!enabled || !page.html) return [];
+    if (!enabled) return [];
 
     const findings: Finding[] = [];
-    const $ = cheerio.load(page.html);
-    const bodyText = $('body').text();
-    const nearDuplicates: { url: string; similarity: number }[] = [];
 
-    for (const [url, otherPage] of Object.entries(context.allPages)) {
-      if (url === page.url || !otherPage.html) continue;
-      const $other = cheerio.load(otherPage.html);
-      const otherBodyText = $other('body').text();
-      const similarity = this.calculateSimilarity(bodyText, otherBodyText);
-
-      if (similarity > 0.8) {
-        nearDuplicates.push({ url, similarity });
-      }
-    }
+    // Use pre-computed index for O(1) similarity lookup
+    const nearDuplicates = context.indexes?.similarPages(page.url, 0.8) ?? [];
 
     if (nearDuplicates.length > 0) {
-      const highSimilarity = nearDuplicates.some(d => d.similarity > 0.9);
+      const highSimilarity = nearDuplicates.some((d: { url: string; similarity: number }) => d.similarity > 0.9);
       findings.push({
         id: createFindingId(this.definition.id, page.url, 'near-duplicates'),
         ruleId: this.definition.id,
@@ -426,7 +392,7 @@ export class DuplicateContentSimilarityRule implements Rule {
         recommendation: highSimilarity
           ? 'Add canonical tags or merge/rewrite near-identical content.'
           : 'Review content to ensure uniqueness and value.',
-        evidence: nearDuplicates.slice(0, 3).map(d => `${d.url} (${(d.similarity * 100).toFixed(0)}%)`).join(', '),
+        evidence: nearDuplicates.slice(0, 3).map((d: { url: string; similarity: number }) => `${d.url} (${(d.similarity * 100).toFixed(0)}%)`).join(', '),
         documentationLink: this.definition.documentationLink,
       });
     }

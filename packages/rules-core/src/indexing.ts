@@ -11,6 +11,7 @@ export class CanonicalIssuesRule implements Rule {
     defaultSeverity: 'error',
     defaultWeight: 7,
     documentationLink: 'https://seocore.dev/docs/rules/canonical-issues',
+    stateless: true,
   };
 
   async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
@@ -87,6 +88,7 @@ export class NoIndexRule implements Rule {
     defaultSeverity: 'info',
     defaultWeight: 2,
     documentationLink: 'https://seocore.dev/docs/rules/noindex-detection',
+    stateless: true,
   };
 
   async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
@@ -124,6 +126,7 @@ export class MissingStructuredDataRule implements Rule {
     defaultSeverity: 'warning',
     defaultWeight: 3,
     documentationLink: 'https://seocore.dev/docs/rules/missing-structured-data',
+    stateless: true,
   };
 
   async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
@@ -177,6 +180,7 @@ export class MissingRobotsTxtRule implements Rule {
     defaultSeverity: 'error',
     defaultWeight: 6,
     documentationLink: 'https://seocore.dev/docs/rules/missing-robots-txt',
+    stateless: true,
   };
 
   async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
@@ -218,6 +222,7 @@ export class MissingSitemapXmlRule implements Rule {
     defaultSeverity: 'error',
     defaultWeight: 6,
     documentationLink: 'https://seocore.dev/docs/rules/missing-sitemap-xml',
+    stateless: true,
   };
 
   async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {

@@ -12,6 +12,10 @@ export { HreflangValidator, type HreflangValidationResult, type HreflangValidati
 export { ContentAnalyzer, type ContentAnalysis } from './content-analyzer.js';
 export { EeatAnalyzer, type EeatAnalysis } from './eeat-analyzer.js';
 export { AiCitationReadinessAnalyzer, type AiCitationReadiness } from './ai-citation-readiness.js';
+export { TechnologyDetector, type TechnologySummary, type DetectedTechnology, type TechnologyCategory } from './technology-detector.js';
+export { TechnologyContextBuilder, type TechnologyContext } from './technology-context.js';
+export * from './js-impact/index.js';
+export { JsImpactAnalyzer } from './js-impact/js-impact-analyzer.js';
 
 export class PageNormalizer {
   static normalize(result: CrawlResult): NormalizedPage {

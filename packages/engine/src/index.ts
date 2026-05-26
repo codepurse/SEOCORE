@@ -13,14 +13,17 @@ import {
   DataSource,
   Category,
   ModuleActivation,
+  RuleEvaluationContext,
+  Finding,
 } from '@seocore/sdk';
 import { resolveConfig } from '@seocore/config';
 import { DefaultPluginRegistry, loadPluginsForTier } from './plugin-registry.js';
 import PQueue from 'p-queue';
 import Bottleneck from 'bottleneck';
+import { AimdConcurrencyController } from './concurrency/index.js';
 import { HttpCrawler, PlaywrightCrawler, LighthouseCrawler, RobotsTxt, SitemapParser, CrawlerRegistry, createDefaultRegistry } from '@seocore/crawler';
 import { PageNormalizer } from '@seocore/analyzers';
-import { createDefaultRuleEngine, type RuleEngine } from '@seocore/rules-core';
+import { createDefaultRuleEngine, type RuleEngine, PageIndexRegistry } from '@seocore/rules-core';
 import { ScoringEngine, CrawlGraphBuilder } from '@seocore/scoring-core';
 
 function patternToRegex(pattern: string): RegExp {
@@ -185,7 +188,9 @@ export class SeoEngine {
     const queued = new Set<string>();
     const pages: Record<string, NormalizedPage> = {};
     const sampledUrls = new Set<string>();
-    const httpCrawler = new HttpCrawler();
+    
+    // Initialize cache if configured
+    const httpCrawler = config.cacheDir ? new HttpCrawler(config.cacheDir) : new HttpCrawler();
 
     let robotsTxt: RobotsTxt | null = null;
     let robotsTxtFound = false;
@@ -221,7 +226,29 @@ export class SeoEngine {
       minTime: config.rateLimitMs,
     });
 
-    const pQueue = new PQueue({ concurrency: config.concurrency });
+    // Initialize AIMD controller if configured
+    let aimdController: AimdConcurrencyController | undefined;
+    let initialConcurrency = config.concurrency;
+    if (config.adaptiveConcurrency) {
+      aimdController = new AimdConcurrencyController({
+        initialConcurrency: config.concurrency,
+      });
+      initialConcurrency = aimdController.concurrency;
+    }
+
+    const pQueue = new PQueue({ concurrency: initialConcurrency });
+
+    // Initialize rule engine and indexes for streaming
+    const ruleEngine = await this.createRuleEngine(tierConfig);
+    const indexes = new PageIndexRegistry();
+    
+    // Get stateless rules to run during crawl
+    const allRules = ruleEngine.getRules(config, tierConfig);
+    const statelessRules = allRules.filter(r => r.definition.stateless);
+    const statefulRules = allRules.filter(r => !r.definition.stateless);
+    
+    // Initialize findings array
+    const findings: any[] = [];
 
     const enqueue = (url: string, depth: number) => {
       if (queued.has(url) || queued.size >= config.maxPages) {
@@ -257,7 +284,13 @@ export class SeoEngine {
         // Run hook: onBeforeCrawl
         const finalUrl = await this.pluginRegistry.runUrlRewriteHook('onBeforeCrawl', url);
 
+        let crawlSuccess = false;
         try {
+          // Acquire AIMD permit if enabled
+          if (aimdController) {
+            await aimdController.acquire();
+          }
+
           let crawlResult;
           const useLighthouse = sampledUrls.has(url);
           if (config.lighthouseEnabled && !useLighthouse) {
@@ -268,6 +301,7 @@ export class SeoEngine {
             crawlResult = await limiter.schedule(() => crawler.crawl(finalUrl, config));
           }
           visited.add(url);
+          crawlSuccess = true;
 
           await this.eventBus.emit('page:loaded', {
             url: finalUrl,
@@ -289,6 +323,45 @@ export class SeoEngine {
 
           await this.eventBus.emit('dom:parsed', { url: finalUrl, page });
 
+          // Index the page
+          indexes.indexPage(page);
+
+          // Run stateless rules immediately
+          if (statelessRules.length > 0) {
+            const ctx: any = {
+              allPages: pages,
+              config,
+              dataSources: new Map(),
+              indexes,
+            };
+            
+            // Parallel rule execution
+            const rulePromises = statelessRules.map(async rule => {
+              try {
+                const ruleFindings = await rule.evaluate(page, ctx);
+                if (ruleFindings) {
+                  return ruleFindings;
+                }
+              } catch (err) {
+                console.error(`[RuleEngine] Error in stateless rule ${rule.definition.id}:`, err);
+              }
+              return [];
+            });
+            
+            const ruleResults = await Promise.all(rulePromises);
+            for (const result of ruleResults) {
+              findings.push(...result);
+            }
+          }
+
+          // Drop HTML if streaming is enabled
+          if (config.streamingEnabled) {
+            page.html = undefined;
+            page.htmlDropped = true;
+          }
+
+          await this.eventBus.emit('page:processed', { url: finalUrl, findingsSoFar: findings.length });
+
           if (depth < config.maxDepth && crawlResult.statusCode === 200) {
             for (const link of page.links) {
               if (link.isInternal && !queued.has(link.url)) {
@@ -299,6 +372,13 @@ export class SeoEngine {
         } catch (err) {
           visited.add(url);
           console.error(`[Crawler] Failed to crawl ${url}:`, err);
+        } finally {
+          // Release AIMD permit if enabled
+          if (aimdController) {
+            aimdController.release(crawlSuccess);
+            // Update queue concurrency
+            pQueue.concurrency = aimdController.concurrency;
+          }
         }
       });
     };
@@ -306,28 +386,55 @@ export class SeoEngine {
     enqueue(startUrl, 1);
     await pQueue.onIdle();
 
+    // Run stateful rules now that all pages are crawled
+    if (statefulRules.length > 0) {
+      const dataSources = new Map<string, DataSource>();
+      
+      // 2. Run lifecycle hook: onBeforeAnalysis
+      const beforeAnalysisCtx = { startUrl, config, dataSources };
+      await this.pluginRegistry.runHook('onBeforeAnalysis', pages, beforeAnalysisCtx);
+
+      const backlinksDS = dataSources.get('backlinks');
+      const backlinkData = backlinksDS?.data as BacklinkIntelligenceData | undefined;
+      const backlinkError = backlinksDS?.status === 'error' ? backlinksDS.error : undefined;
+
+      // Run stateful rules (need to iterate over all pages for each rule)
+      const ctx: RuleEvaluationContext = {
+        allPages: pages,
+        config,
+        dataSources,
+        backlinkData,
+        backlinkError,
+        indexes,
+      };
+      
+      const statefulPromises = Object.values(pages).map(async page => {
+        const pageFindings: Finding[] = [];
+        for (const rule of statefulRules) {
+          try {
+            const ruleFindings = await rule.evaluate(page, ctx);
+            pageFindings.push(...ruleFindings);
+          } catch (err) {
+            console.error(`[RuleEngine] Error in stateful rule ${rule.definition.id}:`, err);
+          }
+        }
+        return pageFindings;
+      });
+      
+      const statefulResults = await Promise.all(statefulPromises);
+      for (const result of statefulResults) {
+        findings.push(...result);
+      }
+
+      // 4. Run lifecycle hook: onAfterAnalysis (allowing mutations)
+      const mutatedFindings = await this.pluginRegistry.runMutationHook('onAfterAnalysis', findings);
+      findings.splice(0, findings.length, ...mutatedFindings);
+    }
+
     // Calculate Crawl Graph before running analysis
     const crawlGraph = CrawlGraphBuilder.build({ pages, startUrl, domain, sitemapUrls });
 
     const totalLoadTimeMs = Date.now() - startTotalTime;
-
-    const dataSources = new Map<string, DataSource>();
-
-    // 2. Run lifecycle hook: onBeforeAnalysis
-    const beforeAnalysisCtx = { startUrl, config, dataSources };
-    await this.pluginRegistry.runHook('onBeforeAnalysis', pages, beforeAnalysisCtx);
-
-    const backlinksDS = dataSources.get('backlinks');
-    const backlinkData = backlinksDS?.data as BacklinkIntelligenceData | undefined;
-    const backlinkError = backlinksDS?.status === 'error' ? backlinksDS.error : undefined;
-
-    const ruleEngine = await this.createRuleEngine(tierConfig);
-
-    // 3. Evaluate SEO rules
-    let findings = await ruleEngine.run(pages, config, dataSources, tierConfig, backlinkData, backlinkError);
-
-    // 4. Run lifecycle hook: onAfterAnalysis (allowing mutations)
-    findings = await this.pluginRegistry.runMutationHook('onAfterAnalysis', findings);
 
     await this.eventBus.emit('analyzer:completed', { url: startUrl, findingsCount: findings.length });
 
@@ -357,7 +464,7 @@ export class SeoEngine {
       totalLoadTimeMs,
       pages,
       crawlGraph,
-      backlinkData,
+      backlinkData: undefined,
     };
 
     // 6. Run lifecycle hook: onComplete

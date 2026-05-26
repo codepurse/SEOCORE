@@ -11,6 +11,7 @@ export class MissingH1Rule implements Rule {
     defaultSeverity: 'error',
     defaultWeight: 8,
     documentationLink: 'https://seocore.dev/docs/rules/missing-h1',
+    stateless: true,
   };
 
   async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
@@ -47,6 +48,7 @@ export class MultipleH1Rule implements Rule {
     defaultSeverity: 'warning',
     defaultWeight: 4,
     documentationLink: 'https://seocore.dev/docs/rules/multiple-h1',
+    stateless: true,
   };
 
   async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
@@ -84,6 +86,7 @@ export class MissingAltTextRule implements Rule {
     defaultSeverity: 'warning',
     defaultWeight: 5,
     documentationLink: 'https://seocore.dev/docs/rules/missing-alt-text',
+    stateless: true,
   };
 
   async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
@@ -122,6 +125,7 @@ export class BrokenLinksRule implements Rule {
     defaultSeverity: 'error',
     defaultWeight: 9,
     documentationLink: 'https://seocore.dev/docs/rules/broken-links',
+    stateless: true,
   };
 
   private readonly externalCache = new Map<string, boolean>();

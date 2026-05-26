@@ -30,7 +30,7 @@ describe('Config schema and resolver', () => {
     expect(parsed.lighthouseEnabled).toBe(true);
     expect(parsed.ruleOverrides['security-headers']?.findingSeverityOverrides?.['security-headers:missing-csp']).toBe('error');
 
-    const reSerialized = JSON.parse(JSON.stringify(parsed));
+    const reSerialized = structuredClone(parsed);
     const reParsed = SeoConfigSchema.parse(reSerialized);
     expect(reParsed).toEqual(parsed);
   });
@@ -47,5 +47,21 @@ describe('Config schema and resolver', () => {
     const config = resolveConfig({ tier: 'fast', maxPages: 12 }, 'nonexistent.json');
     expect(config.tier).toBe('fast');
     expect(config.maxPages).toBe(12);
+  });
+
+  it('parses keyword intelligence provider settings', () => {
+    const config = resolveConfig({
+      keywordIntelligence: {
+        provider: 'mock',
+        locale: 'en',
+        region: 'us',
+        rateLimitMs: 150,
+        batchSize: 10,
+      },
+    }, 'nonexistent.json');
+
+    expect(config.keywordIntelligence?.provider).toBe('mock');
+    expect(config.keywordIntelligence?.locale).toBe('en');
+    expect(config.keywordIntelligence?.batchSize).toBe(10);
   });
 });

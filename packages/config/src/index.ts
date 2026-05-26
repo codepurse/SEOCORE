@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { SeoConfig, AuditPreset, BacklinkApiConfig, ExecutionTier, TIER_PRESETS, ExecutionTierConfig } from '@seocore/sdk';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 // Map old preset names to new execution tiers
 const PRESET_TO_TIER: Record<AuditPreset, ExecutionTier> = {
@@ -45,6 +45,19 @@ const BacklinkApiConfigSchema = z.object({
   logs: LogBacklinkSourceConfigSchema,
 }).optional();
 
+const KeywordIntelligenceConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  provider: z.enum(['mock', 'dataforseo', 'google-ads', 'semrush', 'ahrefs']).optional(),
+  apiKey: z.string().optional(),
+  login: z.string().optional(),
+  password: z.string().optional(),
+  locale: z.string().optional(),
+  region: z.string().optional(),
+  rateLimitMs: z.number().int().nonnegative().default(0),
+  batchSize: z.number().int().positive().default(25),
+  cacheTtlSeconds: z.number().int().positive().default(86400),
+}).optional();
+
 const SeverityEnum = z.enum(['critical', 'error', 'warning', 'info']);
 const ModuleActivationOverrideSchema = z.object({
   core: z.boolean().optional(),
@@ -81,6 +94,12 @@ export const SeoConfigSchema = z.object({
   ).default({}),
   customRulesPath: z.string().optional(),
   backlinks: BacklinkApiConfigSchema,
+  keywordIntelligence: KeywordIntelligenceConfigSchema,
+  streamingEnabled: z.boolean().default(true),
+  ruleConcurrency: z.number().int().positive().optional(),
+  cacheMaxAge: z.number().int().nonnegative().default(86400),
+  cacheDir: z.string().default('.seocore-cache'),
+  adaptiveConcurrency: z.boolean().default(true),
 });
 
 /**
@@ -176,15 +195,20 @@ export function resolveConfig(partial: Partial<SeoConfig> = {}, configFile?: str
     return merged.backlinks as BacklinkApiConfig;
   };
 
+  const ensureKeywordIntelligenceConfig = () => {
+    merged.keywordIntelligence ??= {};
+    return merged.keywordIntelligence;
+  };
+
   // 4. Apply environment overrides (prefix SEO_CORE_)
   if (process.env.SEO_CORE_CONCURRENCY) {
-    merged.concurrency = parseInt(process.env.SEO_CORE_CONCURRENCY, 10);
+    merged.concurrency = Number.parseInt(process.env.SEO_CORE_CONCURRENCY, 10);
   }
   if (process.env.SEO_CORE_MAX_PAGES) {
-    merged.maxPages = parseInt(process.env.SEO_CORE_MAX_PAGES, 10);
+    merged.maxPages = Number.parseInt(process.env.SEO_CORE_MAX_PAGES, 10);
   }
   if (process.env.SEO_CORE_MAX_DEPTH) {
-    merged.maxDepth = parseInt(process.env.SEO_CORE_MAX_DEPTH, 10);
+    merged.maxDepth = Number.parseInt(process.env.SEO_CORE_MAX_DEPTH, 10);
   }
   if (process.env.SEO_CORE_PLAYWRIGHT) {
     merged.playwrightEnabled = process.env.SEO_CORE_PLAYWRIGHT === 'true';
@@ -206,7 +230,7 @@ export function resolveConfig(partial: Partial<SeoConfig> = {}, configFile?: str
   if (process.env.SEO_CORE_BACKLINKS_BING_MAX_PAGES) {
     const backlinks = ensureBacklinksConfig();
     backlinks.bing = backlinks.bing || {};
-    backlinks.bing.maxPages = parseInt(process.env.SEO_CORE_BACKLINKS_BING_MAX_PAGES, 10);
+    backlinks.bing.maxPages = Number.parseInt(process.env.SEO_CORE_BACKLINKS_BING_MAX_PAGES, 10);
   }
   if (process.env.SEO_CORE_BACKLINKS_GSC_EXPORT_PATH) {
     const backlinks = ensureBacklinksConfig();
@@ -216,7 +240,7 @@ export function resolveConfig(partial: Partial<SeoConfig> = {}, configFile?: str
   if (process.env.SEO_CORE_BACKLINKS_GSC_MAX_ROWS) {
     const backlinks = ensureBacklinksConfig();
     backlinks.gsc = backlinks.gsc || {};
-    backlinks.gsc.maxRows = parseInt(process.env.SEO_CORE_BACKLINKS_GSC_MAX_ROWS, 10);
+    backlinks.gsc.maxRows = Number.parseInt(process.env.SEO_CORE_BACKLINKS_GSC_MAX_ROWS, 10);
   }
   if (process.env.SEO_CORE_BACKLINKS_LOG_PATHS) {
     const backlinks = ensureBacklinksConfig();
@@ -229,7 +253,43 @@ export function resolveConfig(partial: Partial<SeoConfig> = {}, configFile?: str
   if (process.env.SEO_CORE_BACKLINKS_LOG_MAX_ROWS) {
     const backlinks = ensureBacklinksConfig();
     backlinks.logs = backlinks.logs || {};
-    backlinks.logs.maxRows = parseInt(process.env.SEO_CORE_BACKLINKS_LOG_MAX_ROWS, 10);
+    backlinks.logs.maxRows = Number.parseInt(process.env.SEO_CORE_BACKLINKS_LOG_MAX_ROWS, 10);
+  }
+  if (process.env.SEO_CORE_KEYWORD_PROVIDER) {
+    const keywordIntelligence = ensureKeywordIntelligenceConfig();
+    keywordIntelligence.provider = process.env.SEO_CORE_KEYWORD_PROVIDER as any;
+  }
+  if (process.env.SEO_CORE_KEYWORD_API_KEY) {
+    const keywordIntelligence = ensureKeywordIntelligenceConfig();
+    keywordIntelligence.apiKey = process.env.SEO_CORE_KEYWORD_API_KEY;
+  }
+  if (process.env.SEO_CORE_KEYWORD_LOGIN) {
+    const keywordIntelligence = ensureKeywordIntelligenceConfig();
+    keywordIntelligence.login = process.env.SEO_CORE_KEYWORD_LOGIN;
+  }
+  if (process.env.SEO_CORE_KEYWORD_PASSWORD) {
+    const keywordIntelligence = ensureKeywordIntelligenceConfig();
+    keywordIntelligence.password = process.env.SEO_CORE_KEYWORD_PASSWORD;
+  }
+  if (process.env.SEO_CORE_KEYWORD_LOCALE) {
+    const keywordIntelligence = ensureKeywordIntelligenceConfig();
+    keywordIntelligence.locale = process.env.SEO_CORE_KEYWORD_LOCALE;
+  }
+  if (process.env.SEO_CORE_KEYWORD_REGION) {
+    const keywordIntelligence = ensureKeywordIntelligenceConfig();
+    keywordIntelligence.region = process.env.SEO_CORE_KEYWORD_REGION;
+  }
+  if (process.env.SEO_CORE_KEYWORD_RATE_LIMIT_MS) {
+    const keywordIntelligence = ensureKeywordIntelligenceConfig();
+    keywordIntelligence.rateLimitMs = Number.parseInt(process.env.SEO_CORE_KEYWORD_RATE_LIMIT_MS, 10);
+  }
+  if (process.env.SEO_CORE_KEYWORD_BATCH_SIZE) {
+    const keywordIntelligence = ensureKeywordIntelligenceConfig();
+    keywordIntelligence.batchSize = Number.parseInt(process.env.SEO_CORE_KEYWORD_BATCH_SIZE, 10);
+  }
+  if (process.env.SEO_CORE_KEYWORD_CACHE_TTL_SECONDS) {
+    const keywordIntelligence = ensureKeywordIntelligenceConfig();
+    keywordIntelligence.cacheTtlSeconds = Number.parseInt(process.env.SEO_CORE_KEYWORD_CACHE_TTL_SECONDS, 10);
   }
 
   // 5. Validate with Zod

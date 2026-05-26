@@ -11,6 +11,7 @@ export class MissingMetaDescriptionRule implements Rule {
     defaultSeverity: 'error',
     defaultWeight: 7,
     documentationLink: 'https://seocore.dev/docs/rules/missing-meta-description',
+    stateless: true,
   };
 
   async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {

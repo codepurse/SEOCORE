@@ -1,0 +1,37 @@
+{
+  "url": "https://example.com",
+  "finalUrl": "https://example.com/",
+  "rawHtml": "<!doctype html><html lang=\"en\"><head><title>Example Domain</title><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><style>body{background:#eee;width:60vw;margin:15vh auto;font-family:system-ui,sans-serif}h1{font-size:1.5em}div{opacity:0.8}a:link,a:visited{color:#348}</style></head><body><div><h1>Example Domain</h1><p>This domain is for use in documentation examples without needing permission. Avoid use in operations.</p><p><a href=\"https://iana.org/domains/example\">Learn more</a></p></div></body></html>\n",
+  "renderedHtml": "<!DOCTYPE html><html lang=\"en\"><head><title>Example Domain</title><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><style>body{background:#eee;width:60vw;margin:15vh auto;font-family:system-ui,sans-serif}h1{font-size:1.5em}div{opacity:0.8}a:link,a:visited{color:#348}</style></head><body><div><h1>Example Domain</h1><p>This domain is for use in documentation examples without needing permission. Avoid use in operations.</p><p><a href=\"https://iana.org/domains/example\">Learn more</a></p></div>\n</body></html>",
+  "statusCode": 200,
+  "rawHeaders": {
+    "age": "13075",
+    "allow": "GET, HEAD",
+    "cf-cache-status": "HIT",
+    "cf-ray": "a01defef4ce7c662-SIN",
+    "connection": "keep-alive",
+    "content-encoding": "br",
+    "content-type": "text/html",
+    "date": "Tue, 26 May 2026 15:50:44 GMT",
+    "last-modified": "Fri, 22 May 2026 08:19:40 GMT",
+    "server": "cloudflare",
+    "transfer-encoding": "chunked"
+  },
+  "bytes": {
+    "raw": 528,
+    "rendered": 528
+  },
+  "timings": {
+    "rawFetchMs": 186,
+    "renderTotalMs": 691,
+    "domContentLoadedMs": 646,
+    "loadEventMs": 646,
+    "networkIdleMs": 1156
+  },
+  "consoleMessages": [],
+  "failedRequests": [],
+  "blockedRequests": [],
+  "redirectChain": [],
+  "crawledAt": "2026-05-26T15:50:44.950Z",
+  "expiresAt": "2026-05-27T15:50:44.951Z"
+}

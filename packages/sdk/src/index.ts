@@ -16,6 +16,8 @@ export interface NormalizedPage {
   contentType: string;
   headers?: Record<string, string>;
   html?: string; // Original HTML content for deep structural scanning
+  /** Set to true after the streaming pipeline drops HTML to free memory */
+  htmlDropped?: true;
   title?: string;
   metaDescription?: string;
   canonical?: string;
@@ -148,6 +150,21 @@ export interface BacklinkApiConfig {
   logs?: LogBacklinkSourceConfig;
 }
 
+export type KeywordMetricsProviderName = 'mock' | 'dataforseo' | 'google-ads' | 'semrush' | 'ahrefs';
+
+export interface KeywordIntelligenceConfig {
+  enabled?: boolean;
+  provider?: KeywordMetricsProviderName;
+  apiKey?: string;
+  login?: string;
+  password?: string;
+  locale?: string;
+  region?: string;
+  rateLimitMs?: number;
+  batchSize?: number;
+  cacheTtlSeconds?: number;
+}
+
 export interface BacklinkDomainMetrics {
   totalBacklinks?: number;
   referringDomains?: number;
@@ -181,6 +198,20 @@ export interface SeoConfig {
   ruleOverrides: Record<string, { enabled?: boolean; severity?: Severity; weight?: number; findingSeverityOverrides?: Record<string, Severity> }>;
   customRulesPath?: string;
   backlinks?: BacklinkApiConfig;
+  /** Phase 6: run the old buffered pipeline instead of streaming */
+  streamingEnabled?: boolean;
+  /** Phase 6: max concurrent rules per page (default: os.cpus().length) */
+  ruleConcurrency?: number;
+  /** Phase 6: cache max age in seconds (default: 24h) */
+  cacheMaxAge?: number;
+  /** Phase 6: custom cache directory */
+  cacheDir?: string;
+  /** Phase 6: disable adaptive concurrency */
+  adaptiveConcurrency?: boolean;
+  /** Phase 8: JavaScript impact analysis configuration */
+  jsImpact?: import('./js-impact.js').JsImpactConfig;
+  /** Phase 9: keyword intelligence provider configuration */
+  keywordIntelligence?: KeywordIntelligenceConfig;
 }
 
 // ==========================================
@@ -261,6 +292,16 @@ export interface RuleDefinition {
   defaultSeverity: Severity;
   defaultWeight: number; // 1-10 used for score calculation
   documentationLink?: string;
+  /**
+   * If true, the rule only reads `page` and never `ctx.allPages`.
+   * Stateless rules can run during the streaming crawl phase.
+   */
+  stateless?: boolean;
+  /**
+   * If true, the rule mutates shared state and must run serially
+   * after the parallel batch. Rare — most rules should be safe.
+   */
+  isolated?: boolean;
 }
 
 export interface Rule {
@@ -279,6 +320,8 @@ export interface RuleEvaluationContext {
   allPages: Record<string, NormalizedPage>;
   config: SeoConfig;
   dataSources: Map<string, DataSource>;
+  /** Phase 6: pre-computed indexes for O(1) cross-page lookups */
+  indexes?: import('./indexes.js').PageIndexRegistry;
   // Deprecated shims (keep for backward compat one release)
   /** @deprecated use dataSources.get('backlinks') */
   backlinkData?: BacklinkIntelligenceData;
@@ -361,6 +404,14 @@ export interface EventMap {
   'report:generated': { path?: string; format: string };
   'audit:complete': { result: AuditResult };
   'crawler:selected': { name: string };
+  // Phase 6 telemetry events
+  'page:processed': { url: string; findingsSoFar: number };
+  'cache:hit': { url: string; ageMs: number };
+  'cache:miss': { url: string };
+  'limiter:throttled': { domain: string; newConcurrency: number };
+  'limiter:recovered': { domain: string; newConcurrency: number };
+  'index:built': { urls: number };
+  'report:streaming': { chunksWritten: number };
 }
 
 export type EventCallback<T> = (data: T) => void | Promise<void>;
@@ -390,3 +441,5 @@ export class EventBus {
 }
 
 export * from './tier-config.js';
+export * from './js-impact.js';
+export * from './js-impact-reporter.js';

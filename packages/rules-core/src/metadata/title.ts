@@ -11,6 +11,7 @@ export class MissingTitleRule implements Rule {
     defaultSeverity: 'critical',
     defaultWeight: 10,
     documentationLink: 'https://seocore.dev/docs/rules/missing-title',
+    stateless: true,
   };
 
   async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {
@@ -70,11 +71,16 @@ export class DuplicateTitleRule implements Rule {
     const { enabled, severity } = getRuleSettings(this.definition, context.config);
     if (!enabled || !page.title) return [];
 
-    const duplicates: string[] = [];
-    for (const [url, otherPage] of Object.entries(context.allPages)) {
-      if (url !== page.url && otherPage.title && otherPage.title.trim().toLowerCase() === page.title.trim().toLowerCase()) {
-        duplicates.push(url);
+    let duplicates = context.indexes?.duplicateTitles(page.url, page.title) ?? [];
+    if (duplicates.length === 0) {
+      // Fallback to O(N) scan if indexes not available
+      const fallback: string[] = [];
+      for (const [url, otherPage] of Object.entries(context.allPages)) {
+        if (url !== page.url && otherPage.title && otherPage.title.trim().toLowerCase() === page.title.trim().toLowerCase()) {
+          fallback.push(url);
+        }
       }
+      duplicates = fallback;
     }
 
     if (duplicates.length > 0) {

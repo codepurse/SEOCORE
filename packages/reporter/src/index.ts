@@ -559,19 +559,19 @@ export class TerminalReporter {
       const inpScore = calculateInpScore(avgInp);
       
       console.log(pc.bold(pc.cyan('⚡ CORE WEB VITALS SCORE BREAKDOWN:')));
-      console.log(`  • LOAD TIME               ${getScoreColor(lcpScore)(String(lcpScore).padStart(3))} / 100   (${(avgLcp / 1000).toFixed(1)}s)`);
+      console.log(`  • Largest Contentful Paint${getScoreColor(lcpScore)(String(lcpScore).padStart(3))} / 100   (${(avgLcp / 1000).toFixed(1)}s)`);
       console.log(`    ${pc.gray("The time it takes for the page’s main content to load")}\n`);
-      console.log(`  • INTERACTIVITY           ${getScoreColor(inpScore)(String(inpScore).padStart(3))} / 100   (${avgInp.toFixed(0)}ms)`);
+      console.log(`  • Interaction to Next Paint${getScoreColor(inpScore)(String(inpScore).padStart(3))} / 100   (${avgInp.toFixed(0)}ms)`);
       console.log(`    ${pc.gray("The total time that a page is blocked from responding to user input, such as mouse clicks, or screen taps.")}\n`);
-      console.log(`  • VISUAL STABILITY        ${getScoreColor(clsScore)(String(clsScore).padStart(3))} / 100   (${avgCls.toFixed(3)})`);
+      console.log(`  • Cumulative Layout Shift ${getScoreColor(clsScore)(String(clsScore).padStart(3))} / 100   (${avgCls.toFixed(3)})`);
       console.log(`    ${pc.gray("How much your page layout shifts or jumps while it’s loading.")}\n`);
     } else {
       console.log(pc.bold(pc.cyan('⚡ CORE WEB VITALS SCORE BREAKDOWN:')));
-      console.log(`  • LOAD TIME               ${pc.yellow('N/A')} (unverifiable from static crawl)`);
+      console.log(`  • Largest Contentful Paint${pc.yellow('N/A')} (unverifiable from static crawl)`);
       console.log(`    ${pc.gray("The time it takes for the page’s main content to load")}\n`);
-      console.log(`  • INTERACTIVITY           ${pc.yellow('N/A')} (unverifiable from static crawl)`);
+      console.log(`  • Interaction to Next Paint${pc.yellow('N/A')} (unverifiable from static crawl)`);
       console.log(`    ${pc.gray("The total time that a page is blocked from responding to user input, such as mouse clicks, or screen taps.")}\n`);
-      console.log(`  • VISUAL STABILITY        ${pc.yellow('N/A')} (unverifiable from static crawl)`);
+      console.log(`  • Cumulative Layout Shift ${pc.yellow('N/A')} (unverifiable from static crawl)`);
       console.log(`    ${pc.gray("How much your page layout shifts or jumps while it’s loading.")}\n`);
     }
 

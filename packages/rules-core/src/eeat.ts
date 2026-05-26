@@ -20,6 +20,7 @@ export class EeatScoreRule implements Rule {
     defaultSeverity: 'warning',
     defaultWeight: 5,
     documentationLink: 'https://seocore.dev/docs/rules/eeat-score',
+    stateless: true,
   };
 
   async evaluate(page: NormalizedPage, context: RuleEvaluationContext): Promise<Finding[]> {

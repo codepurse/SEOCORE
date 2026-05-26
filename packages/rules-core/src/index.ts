@@ -5,3 +5,4 @@ export * from './indexing.js';
 export * from './content-links.js';
 export * from './eeat.js';
 export * from './rule-engine.js';
+export * from './indexes/index.js';

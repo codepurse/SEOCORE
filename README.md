@@ -100,7 +100,17 @@
     - Rules cover payload weight, legacy formats, lazy-loading strategy, CLS risk, responsive `srcset`, alt text, and broken/mixed-content URLs.
     - Byte-weighted scoring, mobile payload budgets (1.5MB), and LCP image weight targets (100KB).
     - Exports terminal summary plus JSON or HTML reports with thumbnails and worst-offender tables.
-16. **Production-Ready Reporting**:
+16. **Evidence-based Technology Stack Detection (`technology` command)**:
+    - Analyzes frontend frameworks, rendering strategies, CDN/edge delivery networks, backend servers, CMS packages, analytics trackers, UI systems, asset fonts, and third-party tools.
+    - Suppresses low-confidence noise. Requires deterministic evidence weights before reporting.
+    - Classifies page rendering strategies directly (Hybrid, SSR, CSR, or static HTML).
+    - Exports findings in terminal tables, structured raw JSON, or clean HTML charts.
+17. **JavaScript SEO Impact Report (`js-impact` command)**:
+    - Compares raw HTML against rendered DOM to detect SEO-relevant changes caused by client-side JavaScript.
+    - Flags metadata, heading, content, links, image, and structured-data parity issues between pre-render and post-render states.
+    - Helps diagnose CSR / hydration problems that can hide content or links from crawlers.
+    - Exports terminal, JSON, HTML, and Markdown reports for debugging and CI workflows.
+18. **Production-Ready Reporting**:
 
     - Real-time colored terminal logging via custom EventBus.
     - Exports rich, detailed audit logs in terminal, JSON, HTML, and SARIF formats.
@@ -156,222 +166,253 @@
 
    SEOCore can be executed via the CLI or imported directly as an SDK.
 
-   ### CLI Usage
+  ### CLI Usage
 
-   The core CLI executable can be invoked using `npm run cli` or linked locally.
+  The core CLI executable is `seocore`.
+
+  #### Main Commands:
+   - `audit`: Audit a website for SEO, speed, indexing, accessibility, and metadata
+   - `crawl`: Crawl a website and list discovered pages without scoring
+   - `compare`: Compare two websites or SEO audit reports
+   - `images`: Analyze images on a webpage or crawl an entire site for image issues
+   - `technology`: Detect website technology stack with evidence-based confidence scores
+   - `js-impact`: Compare raw HTML vs rendered DOM for JavaScript SEO impact
+   - `inspect`: Single-aspect probes (robots, sitemap, schema, hreflang, backlinks, rank, screenshot, llms-txt)
+   - `analyze`: Analyzer-driven deep dives (content, ai-visibility)
+   - `config`: Manage and validate SEO config
+   - `rules`: Manage and inspect SEO validation rules
+   - `tier`: Manage execution tiers
+
+   ---
 
    #### 1. Initialize Configuration
    Generate a default `seocore.config.json` configuration file at your project root:
    ```bash
-   npm run cli -- config:init
+  seocore config init
+   ```
+
+   Show current config:
+   ```bash
+  seocore config show
+   ```
+
+   Validate config:
+   ```bash
+  seocore config validate
    ```
 
    #### 2. Run a Site Audit
    Audit a website's landing page (default standard tier):
    ```bash
-   npm run cli -- audit https://example.com
+  seocore audit https://example.com
    ```
 
    Audit using specific tiers:
    ```bash
    # Fast tier (core rules, 1 page, static HTML)
-   npm run cli -- audit https://example.com --tier fast
+  seocore audit https://example.com --tier fast
 
    # Standard tier (core + performance, 100 pages, simulated CWV)
-   npm run cli -- audit https://example.com --tier standard
+  seocore audit https://example.com --tier standard
 
    # Deep tier (all modules, 500 pages, Playwright rendering)
-   npm run cli -- audit https://example.com --tier deep
+  seocore audit https://example.com --tier deep
 
    # Enterprise tier (all modules + plugins, 5000 pages, Lighthouse sampling)
-   npm run cli -- audit https://example.com --tier enterprise
+  seocore audit https://example.com --tier enterprise
    ```
 
    Export audit as HTML report:
    ```bash
-   npm run cli -- audit https://example.com --format html --output ./seocore-report.html
+  seocore audit https://example.com --format html --output ./seocore-report.html
    ```
 
-   #### 3. Deep Multi-Page Audit
-   Recursively crawl and audit up to 50 pages up to a depth of 3:
-   ```bash
-   npm run cli -- audit https://example.com --full --depth 3 --max-pages 50
-   ```
-
-   #### 4. Run Crawler Only
+   #### 3. Run Crawler Only
    Map site structure and list HTTP responses without executing SEO rules or scoring:
    ```bash
-   npm run cli -- crawl https://example.com --depth 2 --max-pages 100
+  seocore crawl https://example.com --depth 2 --max-pages 100
    ```
 
-   #### 5. List SEO Validation Rules
-   See all registered rules, severity levels, and category assignments:
+   #### 4. Manage SEO Validation Rules
+   List all registered rules, severity levels, and category assignments:
    ```bash
-   npm run cli -- rules:list
+  seocore rules list
    ```
 
-   #### 6. List Available Execution Tiers
-   See all available tiers, their capabilities, and configurations:
+   Describe a specific rule:
    ```bash
-   npm run cli -- tier:list
+  seocore rules describe <rule-id>
    ```
 
-   #### 7. Analyze AI Visibility & Structure
+   #### 5. Manage Execution Tiers
+   List all available tiers, their capabilities, and configurations:
+   ```bash
+  seocore tier list
+   ```
+
+   Describe a specific tier:
+   ```bash
+  seocore tier describe <tier-name>
+   ```
+
+   #### 6. Analyze AI Visibility & Structure
    Evaluate search engine/chatbot discovery, metadata structure, citation readiness, and entity mapping:
    ```bash
-   npm run cli -- ai-visibility https://example.com
+  seocore analyze ai-visibility https://example.com
    ```
 
    Output results in raw JSON:
    ```bash
-   npm run cli -- ai-visibility https://example.com --json
+  seocore analyze ai-visibility https://example.com --json
    ```
 
-   #### 8. Analyze E-E-A-T & Content Quality
+   #### 7. Analyze E-E-A-T & Content Quality
    Evaluate Experience, Expertise, Authoritativeness, and Trustworthiness (E-E-A-T), content readability, structure, and AI citation readiness:
    ```bash
-   npm run cli -- content https://example.com/blog/post
-   # or using the alias
-   npm run cli -- eeat https://example.com/blog/post
+  seocore analyze content https://example.com/blog/post
    ```
 
    Export as JSON:
    ```bash
-   npm run cli -- content https://example.com --json --output content-report.json
+  seocore analyze content https://example.com --json --output content-report.json
    ```
 
    Export as HTML:
    ```bash
-   npm run cli -- content https://example.com --format html --output content-report.html
+  seocore analyze content https://example.com --format html --output content-report.html
    ```
 
    CI Mode with budgets:
    ```bash
-   npm run cli -- content https://example.com --ci --budget-eeat 70 --budget-content 75
+  seocore analyze content https://example.com --ci --budget-eeat 70 --budget-content 75
    ```
 
-   #### 9. Validate Schema.org Structured Data & Entity Graph
-   Validate Schema.org JSON-LD, Microdata, and RDFa structures. Performs E-E-A-T trust audits, metadata integrity cross-checks, and builds dynamic visual entity graphs (DAG):
-   ```bash
-   npm run cli -- schema https://example.com
-   ```
+   #### 8. Inspect Single Aspects
+   The `inspect` command has subcommands for individual checks:
 
-   Filter validation to specific schema types:
-   ```bash
-   npm run cli -- schema https://example.com --schema Article,Product
-   ```
+   - **robots**: Verify robots.txt access rules, exclusions, and sitemap references
+     ```bash
+    seocore inspect robots https://example.com
+     ```
 
-   Export schema validation in SARIF format:
-   ```bash
-   npm run cli -- schema https://example.com --format sarif --output ./schema-report.sarif
-   ```
+   - **sitemap**: Analyze sitemap.xml and verify all linked URLs are reachable
+     ```bash
+    seocore inspect sitemap https://example.com --check-links
+     ```
 
-   #### 10. Check robots.txt Directives
-   Verify robots.txt access rules, exclusions, and sitemap references:
-   ```bash
-   npm run cli -- robots https://example.com
-   ```
+   - **llms-txt**: Verify `llms.txt` and `/.well-known/llms.txt` rules for AI crawlers like GPTBot, ClaudeBot, and PerplexityBot
+     ```bash
+    seocore inspect llms-txt https://example.com
+     ```
 
-   #### 11. Check sitemap.xml Coverage
-   Analyze sitemap.xml and verify all linked URLs are reachable:
-   ```bash
-   npm run cli -- sitemap https://example.com --check-links
-   ```
+   - **schema**: Validate Schema.org JSON-LD, Microdata, and RDFa structures
+     ```bash
+    seocore inspect schema https://example.com
+     ```
 
-   #### 12. Audit LLMs Directives
-   Verify `llms.txt` and `/.well-known/llms.txt` rules for AI crawlers like GPTBot, ClaudeBot, and PerplexityBot:
-   ```bash
-   npm run cli -- llms-txt https://example.com
-   ```
+   - **hreflang**: Validate a website's hreflang tags for bidirectional links, x-default consistency, and language code validity
+     ```bash
+    seocore inspect hreflang https://example.com
+     ```
 
-   #### 13. Analyze Domain Backlinks
-   Extract backlink profiles and analyze referring domain authority and spam scores:
-   ```bash
-   npm run cli -- backlinks https://example.com
-   ```
+   - **backlinks**: Extract backlink profiles and analyze referring domain authority and spam scores
+     ```bash
+    seocore inspect backlinks https://example.com
+     ```
 
-   #### 14. Validate Hreflang Tags
-   Validate a website's hreflang tags for bidirectional links, x-default consistency, and language code validity:
-   ```bash
-   npm run cli -- hreflang https://example.com
-   ```
+   - **keywords**: Perform advanced SEO keyword intelligence, noise filtering, and topic clustering
+     ```bash
+    seocore inspect keywords "behavioral health"
+     ```
+     With deep expansions:
+     ```bash
+    seocore inspect keywords "behavioral health" --expand
+     ```
+     With noise filtering options:
+     ```bash
+    seocore inspect keywords "behavioral health" --strict-noise-filter
+     ```
 
-   Deep-crawl all hreflang-referenced pages for full validation:
-   ```bash
-   npm run cli -- hreflang https://example.com --deep
-   ```
+   - **rank**: Check if a target website ranks in Google's top 10 organic results for a given keyword
+     ```bash
+    seocore inspect rank "seo crawler" https://example.com
+     ```
 
-   Export validation report as JSON:
-   ```bash
-   npm run cli -- hreflang https://example.com --json --output hreflang-report.json
-   ```
+   - **screenshot**: Capture screenshots of a target page or entire website
+     ```bash
+    seocore inspect screenshot https://example.com --breakpoints mobile,tablet,desktop
+     ```
 
-   #### 15. Google Rank Checker
-   Check if a target website ranks in Google's top 10 organic results for a given keyword:
-   ```bash
-   npm run cli -- rank-check "seo crawler" https://example.com
-   ```
-
-   #### 16. Compare Site Audits
+   #### 9. Compare Site Audits
    Compare SEO health scores, metadata differences, and performance metrics across two websites or audit files:
    ```bash
-   npm run cli -- compare https://site-a.com https://site-b.com --focus technical
+  seocore compare https://site-a.com https://site-b.com --focus technical
    ```
 
-   #### 17. Capture Visual Screenshots
-   Capture screenshots of a target page or entire website:
-   ```bash
-   # Basic desktop screenshot
-   npm run cli -- screenshot https://example.com
-
-   # Capture at multiple breakpoints
-   npm run cli -- screenshot https://example.com --breakpoints mobile,tablet,desktop
-
-   # Capture full-page screenshots
-   npm run cli -- screenshot https://example.com --full-page
-
-   # Use specific Playwright device
-   npm run cli -- screenshot https://example.com --device "iPhone 15 Pro"
-
-   # Deep crawl and capture screenshots of all pages from sitemap
-   npm run cli -- screenshot https://example.com --deep
-
-   # Custom output directory
-   npm run cli -- screenshot https://example.com --output ./my-screenshots
-
-   # Custom navigation timeout (ms)
-   npm run cli -- screenshot https://example.com --timeout 60000
-   ```
-
-   #### 18. Audit Images (SEO + Performance)
+   #### 10. Audit Images (SEO + Performance)
    Audit images on a single page or across the site for weight, format, delivery, CLS, LCP, alt text, caching, and broken URLs. See [docs/commands/images.md](docs/commands/images.md) for the full rule catalog.
 
    Single page (default):
    ```bash
-   npm run cli -- images https://example.com
+  seocore images https://example.com
    ```
 
    Full site crawl (same origin, respects `robots.txt`; capped at ~100 pages and 500 unique images by default):
    ```bash
-   npm run cli -- images https://example.com --crawl
+  seocore images https://example.com --crawl
    ```
 
    Playwright mode (rendered size, viewport, LCP element on the start URL):
    ```bash
-   npm run cli -- images https://example.com --playwright
+  seocore images https://example.com --playwright
    ```
 
    Site crawl + Playwright + HTML report:
    ```bash
-   npm run cli -- images https://example.com --crawl --playwright -f html -o ./seocore-images-report.html
+  seocore images https://example.com --crawl --playwright -f html -o ./seocore-images-report.html
    ```
 
    JSON export with custom thresholds:
    ```bash
-   npm run cli -- images https://example.com --crawl --max-images 200 --threshold-kb 150 -f json -o ./images-audit.json
+  seocore images https://example.com --crawl --max-images 200 --threshold-kb 150 -f json -o ./images-audit.json
    ```
 
-   **Flags:** `--crawl`, `--playwright`, `--threshold-kb` (default 200), `--concurrency` (default 5), `--max-images` (default 500), `--user-agent`, `--timeout` (default 10000ms), `-f json|html`, `-o <path>`.
+   **Flags:** `--crawl`, `--playwright`, `--threshold-kb` (default 100), `--concurrency` (default 10), `--max-images` (default 500), `--user-agent`, `--timeout` (default 30000ms), `-f json|html`, `-o <path>`.
+
+   #### 11. Audit Web Technology Stack
+   Identify framework, CDN, hosting, CMS, libraries, analytics, fonts, and external APIs with confidence ratings:
+   ```bash
+  seocore technology https://example.com
+   ```
+
+   Show underlying signature evidence lines and raw scores:
+   ```bash
+  seocore technology https://example.com --verbose
+   ```
+
+   Export stack detection to structured JSON or standalone HTML:
+   ```bash
+  seocore technology https://example.com --format html --output ./technology-report.html
+   ```
+
+   #### 12. Audit JavaScript SEO Impact
+   Compare raw source HTML against rendered DOM to see what JavaScript changes for crawlers. See [docs/js-impact.md](docs/js-impact.md) for command details and output reference.
+   ```bash
+  seocore js-impact https://example.com
+   ```
+
+   Use safer wait modes for JS-heavy marketing sites that never go idle:
+   ```bash
+  seocore js-impact https://example.com --wait-event load --timeout-ms 45000
+   ```
+
+   Export machine-readable JSON or shareable HTML:
+   ```bash
+  seocore js-impact https://example.com --output json --output-file ./js-impact-report.json
+  seocore js-impact https://example.com --output html --output-file ./js-impact-report.html
+   ```
+
+   **Flags:** `--wait-event load|domcontentloaded|networkidle`, `--timeout-ms`, `--wait-extra-ms`, `-o terminal|json|html|markdown`, `--output-file <path>`.
 
    ### SDK Integration
 

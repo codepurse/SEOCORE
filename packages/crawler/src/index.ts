@@ -1,29 +1,6 @@
-import { createServer } from 'node:net';
 import { Crawler, CrawlResult, SeoConfig, RedirectHop } from '@seocore/sdk';
-
-async function getAvailablePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-    server.unref();
-    server.on('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') {
-        server.close(() => reject(new Error('Failed to allocate browser debug port')));
-        return;
-      }
-
-      const { port } = address;
-      server.close((err) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve(port);
-      });
-    });
-  });
-}
+import { FilesystemCrawlCache, CrawlCacheEntry } from './cache/index.js';
+import { BrowserPool } from './browser-pool.js';
 
 // ==========================================
 // LIGHTHOUSE CRAWLER (PERFORMANCE AUDIT)
@@ -35,44 +12,30 @@ export class LighthouseCrawler implements Crawler {
   }
 
   private readonly httpCrawler = new HttpCrawler();
-  private browser: any = null;
-  private port: number | null = null;
   private lighthouseModule: any = null;
-  private playwrightModule: any = null;
-  private initialized = false;
+  private browserPool = BrowserPool.getInstance();
+  private browserRef: { needDebugPort: boolean } = { needDebugPort: true };
 
-  private async initialize(): Promise<void> {
-    if (this.initialized) return;
-    
-    try {
+  private async initialize(): Promise<{
+    browser: any;
+    port: number;
+    lighthouseModule: any;
+  }> {
+    if (!this.lighthouseModule) {
       // @ts-ignore
       this.lighthouseModule = await import('lighthouse');
-      // @ts-ignore
-      this.playwrightModule = await import('playwright');
-      
-      this.port = await getAvailablePort();
-      this.browser = await this.playwrightModule.chromium.launch({
-        headless: true,
-        args: [
-          `--remote-debugging-port=${this.port}`,
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-        ],
-      });
-      
-      this.initialized = true;
-    } catch (err) {
-      console.warn(`[Crawler] Lighthouse or Playwright not installed. Falling back to HTTP Crawler.`);
-      throw err;
     }
+    const { browser, port } = await this.browserPool.acquireBrowser({ needDebugPort: true });
+    if (!port) {
+      throw new Error('Browser debug port not available');
+    }
+    return { browser, port, lighthouseModule: this.lighthouseModule };
   }
 
   async crawl(url: string, config: SeoConfig): Promise<CrawlResult> {
     const startTime = Date.now();
     try {
-      await this.initialize();
+      const { port, lighthouseModule } = await this.initialize();
       
       // Fetch page HTML first using HttpCrawler
       const httpResult = await this.httpCrawler.crawl(url, config);
@@ -90,7 +53,7 @@ export class LighthouseCrawler implements Crawler {
           'total-byte-weight',
           'network-requests',
         ],
-        port: this.port!,
+        port: port!,
         throttlingMethod: 'provided',
         throttling: {
           rttMs: 40,
@@ -104,7 +67,7 @@ export class LighthouseCrawler implements Crawler {
         formFactor: 'desktop',
       };
       
-      const runnerResult = await this.lighthouseModule.default(url, options);
+      const runnerResult = await lighthouseModule.default(url, options);
       
       // Extract performance metrics
       const lhr = runnerResult?.lhr as any;
@@ -146,25 +109,12 @@ export class LighthouseCrawler implements Crawler {
       };
     } catch (err: any) {
       // If Lighthouse fails, try to recover gracefully
-      if (!this.initialized) {
-        return this.httpCrawler.crawl(url, config);
-      }
-      return {
-        url,
-        statusCode: 0,
-        loadTimeMs: Date.now() - startTime,
-        contentType: 'none',
-        error: `Lighthouse error: ${err.message}`,
-      };
+      return this.httpCrawler.crawl(url, config);
     }
   }
 
   async close(): Promise<void> {
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
-      this.initialized = false;
-    }
+    await this.browserPool.releaseBrowser({ needDebugPort: true });
   }
 }
 
@@ -363,12 +313,60 @@ export class LlmsTxtParser {
 // ==========================================
 
 export class HttpCrawler implements Crawler {
+  private cache?: FilesystemCrawlCache;
+
+  constructor(cacheDir?: string) {
+    if (cacheDir) {
+      this.cache = new FilesystemCrawlCache(cacheDir);
+    }
+  }
+
   async crawl(url: string, config: SeoConfig): Promise<CrawlResult> {
     let currentUrl = url;
     const redirectChain: RedirectHop[] = [];
     const maxRedirects = 5;
     let attempts = 0;
     const maxAttempts = (config.retryCount ?? 2) + 1;
+
+    // Check cache first
+    if (this.cache) {
+      const cachedEntry = await this.cache.get(currentUrl);
+      if (cachedEntry) {
+        // Validate with conditional request
+        const headers: Record<string, string> = {
+          'User-Agent': 'Mozilla/5.0 (compatible; SeoCoreEngine/1.0.0; +https://github.com/seocore)',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        };
+        if (cachedEntry.etag) {
+          headers['If-None-Match'] = cachedEntry.etag;
+        }
+        if (cachedEntry.lastModified) {
+          headers['If-Modified-Since'] = cachedEntry.lastModified;
+        }
+
+        try {
+          const response = await fetch(currentUrl, {
+            method: 'HEAD',
+            headers,
+          });
+
+          if (response.status === 304) {
+            // Cache is valid, use cached body
+            const html = await this.cache.readBody(cachedEntry);
+            return {
+              url: currentUrl,
+              html,
+              statusCode: cachedEntry.statusCode,
+              loadTimeMs: 0,
+              contentType: cachedEntry.contentType,
+              redirectChain,
+            };
+          }
+        } catch {
+          // Ignore errors, fall through to fresh fetch
+        }
+      }
+    }
 
     while (attempts < maxAttempts) {
       attempts++;
@@ -459,6 +457,26 @@ export class HttpCrawler implements Crawler {
         response.headers.forEach((value, key) => {
           headers[key] = value;
         });
+
+        // Cache the result
+        if (this.cache && response.status === 200) {
+          const entry: CrawlCacheEntry = {
+            url: currentUrl,
+            statusCode: response.status,
+            contentType,
+            etag: response.headers.get('etag') ?? undefined,
+            lastModified: response.headers.get('last-modified') ?? undefined,
+            bodyHash: '',
+            bodyPath: '',
+            crawledAt: new Date().toISOString(),
+          };
+          // Calculate expiresAt from config (default 24h)
+          const cacheMaxAge = config.cacheMaxAge ?? 86400;
+          entry.expiresAt = new Date(Date.now() + cacheMaxAge * 1000).toISOString();
+          
+          await this.cache.set(currentUrl, entry, Buffer.from(html));
+        }
+
         return {
           url: currentUrl,
           html,
@@ -506,6 +524,7 @@ export class PlaywrightCrawler implements Crawler {
   }
 
   private readonly httpCrawler = new HttpCrawler();
+  private browserPool = BrowserPool.getInstance();
 
   async crawl(url: string, config: SeoConfig): Promise<CrawlResult> {
     const startTime = Date.now();
@@ -521,18 +540,7 @@ export class PlaywrightCrawler implements Crawler {
         // ignore
       }
 
-      // Dynamic import of playwright-core or playwright to avoid heavy required install
-      // If user has it, we use it, otherwise fallback to HTTP crawler with warning
-      let playwright;
-      try {
-        // @ts-ignore
-        playwright = await import('playwright');
-      } catch {
-        console.warn(`[Crawler] Playwright is configured but not installed. Falling back to HTTP Crawler.`);
-        return this.httpCrawler.crawl(url, config);
-      }
-
-      const browser = await playwright.chromium.launch({ headless: true });
+      const { browser, playwrightModule } = await this.browserPool.acquireBrowser({ needDebugPort: false });
       const context = await browser.newContext({
         userAgent: 'Mozilla/5.0 (compatible; SeoCoreEngine/1.0.0; +https://github.com/seocore; Playwright)',
       });
@@ -579,7 +587,7 @@ export class PlaywrightCrawler implements Crawler {
       const loadTimeMs = Date.now() - startTime;
 
       if (!response) {
-        await browser.close();
+        await context.close();
         return {
           url,
           statusCode: 0,
@@ -598,7 +606,7 @@ export class PlaywrightCrawler implements Crawler {
         pageSizeBytes = Buffer.byteLength(html, 'utf8');
       }
 
-      await browser.close();
+      await context.close();
 
       return {
         url,
@@ -630,7 +638,12 @@ export class PlaywrightCrawler implements Crawler {
       };
     }
   }
+
+  async close(): Promise<void> {
+    await this.browserPool.releaseBrowser({ needDebugPort: false });
+  }
 }
 
+export { RenderedCrawler } from './rendered-crawler.js';
 export { CrawlerRegistry, type CrawlerFactory, createDefaultRegistry } from './registry.js';
 
