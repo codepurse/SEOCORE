@@ -3,15 +3,16 @@ import { Command } from 'commander';
 import pc from 'picocolors';
 
 import { command as auditCommand } from './commands/audit.js';
-import { command as crawlCommand } from './commands/crawl.js';
 import { command as compareCommand } from './commands/compare.js';
+import { command as crawlCommand } from './commands/crawl.js';
+import { command as directoriesCommand } from './commands/directories.js';
 import { command as imagesCommand } from './commands/images.js';
-import { command as technologyCommand } from './commands/technology.js';
 import { command as jsImpactCommand } from './commands/js-impact/index.js';
+import { command as technologyCommand } from './commands/technology.js';
 
-import { group as inspectGroup } from './commands/inspect/index.js';
 import { group as analyzeGroup } from './commands/analyze/index.js';
 import { group as configGroup } from './commands/config/index.js';
+import { group as inspectGroup } from './commands/inspect/index.js';
 import { group as rulesGroup } from './commands/rules/index.js';
 import { group as tierGroup } from './commands/tier/index.js';
 
@@ -30,6 +31,7 @@ program.addCommand(compareCommand());
 program.addCommand(imagesCommand());
 program.addCommand(technologyCommand());
 program.addCommand(jsImpactCommand());
+program.addCommand(directoriesCommand());
 
 program.addCommand(inspectGroup());
 program.addCommand(analyzeGroup());

@@ -6,6 +6,11 @@ import inquirer from 'inquirer';
 import pc from 'picocolors';
 import { attachStandardEvents, buildPartialConfig, validateTier, validateUrl } from '../shared/index.js';
 import { addPerfOptions } from '../shared/options.js';
+import { computeDiff, hasCriticalRegressions } from '../history/diff.js';
+import { saveSnapshot, loadLatestSnapshot } from '../history/snapshot-store.js';
+import { reportDiff } from '../history/reporter.js';
+import { getHistoryDir } from '../history/path-utils.js';
+import { explainDryRun, printDryRunSummary } from '../shared/explain.js';
 
 function parseModuleOverride(input?: string): any {
   if (!input) return undefined;
@@ -46,13 +51,89 @@ export function command(): Command {
     .option('--budget-inp <ms>', 'Interaction to Next Paint budget in ms', parseInt)
     .option('--budget-js <bytes>', 'Total JavaScript payload budget', parseInt)
     .option('--module <modules>', 'Comma-separated module override')
+    .option('--save', 'Save audit result as a reusable snapshot', false)
+    .option('--diff', 'Compare current audit against the latest saved snapshot', false)
+    .option('--history-dir <path>', 'Custom history directory for snapshots')
+    .option('--dry-run', 'Show planned tier/modules/rules without crawling', false)
     .action(handler);
+}
+
+async function handleDiff(
+  url: string,
+  currentResult: Awaited<ReturnType<SeoEngine['run']>>,
+  options: any
+): Promise<void> {
+  const historyDir = options.historyDir || process.env.SEOCORE_HISTORY_DIR || getHistoryDir();
+  
+  const baselineSnapshot = loadLatestSnapshot(url, historyDir);
+  
+  if (!baselineSnapshot) {
+    console.error(pc.red(`\nNo saved snapshot found for ${url}`));
+    console.log(pc.yellow(`Run \`seocore audit ${url} --save\` first to create a baseline snapshot.`));
+    process.exit(1);
+  }
+  
+  const currentSnapshot = {
+    metadata: {
+      url,
+      host: baselineSnapshot.metadata.host,
+      savedAt: new Date().toISOString(),
+      cliVersion: '1.0.0',
+      tier: options.tier,
+      score: currentResult.score,
+      snapshotPath: '',
+    },
+    result: currentResult,
+  };
+  
+  const diff = computeDiff(baselineSnapshot.result, currentResult);
+  
+  reportDiff(baselineSnapshot, currentSnapshot, diff, {
+    verbose: options.verbose,
+    ci: options.ci,
+  });
+  
+  if (options.ci && hasCriticalRegressions(diff)) {
+    process.exit(1);
+  }
+}
+
+async function handleSave(
+  url: string,
+  currentResult: Awaited<ReturnType<SeoEngine['run']>>,
+  options: any
+): Promise<void> {
+  const historyDir = options.historyDir || process.env.SEOCORE_HISTORY_DIR;
+  
+  saveSnapshot(currentResult, {
+    historyDir,
+    cliVersion: '1.0.0',
+    tier: options.tier,
+    config: {
+      preset: options.preset,
+      full: options.full,
+      maxPages: options.maxPages,
+      maxDepth: options.depth,
+      concurrency: options.concurrency,
+      playwright: options.playwright,
+      lighthouse: options.lighthouse,
+      modules: options.module ? parseModuleOverride(options.module) : undefined,
+    },
+  });
 }
 
 export async function handler(url: string, options: any): Promise<void> {
   try {
     validateUrl(url, 'Target URL');
     const tier = validateTier(options.tier);
+
+    if (options.dryRun) {
+      console.log(pc.yellow('\n⚠️  DRY RUN MODE - No crawl will be performed\n'));
+      
+      const dryRunOutput = await explainDryRun(url, options);
+      printDryRunSummary(dryRunOutput, url);
+      return;
+    }
 
     const partialConfig: any = buildPartialConfig(options);
     partialConfig.preset = options.preset as AuditPreset;
@@ -78,30 +159,45 @@ export async function handler(url: string, options: any): Promise<void> {
     const engine = new SeoEngine(eventBus);
     const result = await engine.run(url, partialConfig, tier);
 
-    const format = options.format;
-    if (format === 'json' || format === 'both' || format === 'all') {
-      const outPath = options.output && options.output.endsWith('.json') ? options.output : './seocore-report.json';
-      const absolutePath = JsonReporter.export(result, outPath);
-      console.log(pc.green(`✓  JSON Report exported to ${pc.bold(absolutePath)}`));
+    if (options.diff) {
+      await handleDiff(url, result, options);
     }
 
-    if (format === 'html' || format === 'all') {
-      const outPath = options.output && options.output.endsWith('.html') ? options.output : './seocore-report.html';
-      const absolutePath = HtmlReporter.export(result, outPath);
-      console.log(pc.green(`✓  HTML Report exported to ${pc.bold(absolutePath)}`));
+    if (options.save) {
+      await handleSave(url, result, options);
     }
 
-    if (format === 'sarif') {
-      const outPath = options.output && options.output.endsWith('.sarif') ? options.output : './seocore-report.sarif';
-      const absolutePath = SarifReporter.export(result, outPath);
-      console.log(pc.green(`✓  SARIF Report exported to ${pc.bold(absolutePath)}`));
+    if (options.diff && options.save) {
+      console.log(pc.gray('\n--- Saving current audit as new snapshot ---\n'));
+      await handleSave(url, result, options);
     }
 
-    if (format === 'terminal' || format === 'both' || format === 'all') {
-      TerminalReporter.report(result, {
-        verbose: options.verbose,
-        minSeverity: options.minSeverity as Severity,
-      });
+    if (!options.diff) {
+      const format = options.format;
+      if (format === 'json' || format === 'both' || format === 'all') {
+        const outPath = options.output && options.output.endsWith('.json') ? options.output : './seocore-report.json';
+        const absolutePath = JsonReporter.export(result, outPath);
+        console.log(pc.green(`✓  JSON Report exported to ${pc.bold(absolutePath)}`));
+      }
+
+      if (format === 'html' || format === 'all') {
+        const outPath = options.output && options.output.endsWith('.html') ? options.output : './seocore-report.html';
+        const absolutePath = HtmlReporter.export(result, outPath);
+        console.log(pc.green(`✓  HTML Report exported to ${pc.bold(absolutePath)}`));
+      }
+
+      if (format === 'sarif') {
+        const outPath = options.output && options.output.endsWith('.sarif') ? options.output : './seocore-report.sarif';
+        const absolutePath = SarifReporter.export(result, outPath);
+        console.log(pc.green(`✓  SARIF Report exported to ${pc.bold(absolutePath)}`));
+      }
+
+      if (format === 'terminal' || format === 'both' || format === 'all') {
+        TerminalReporter.report(result, {
+          verbose: options.verbose,
+          minSeverity: options.minSeverity as Severity,
+        });
+      }
     }
 
     if (options.ci) {
@@ -159,7 +255,7 @@ export async function handler(url: string, options: any): Promise<void> {
         }
       }
 
-      if (exitCode !== 0) {
+      if (exitCode !== 0 && !options.diff) {
         process.exit(exitCode);
       }
     }

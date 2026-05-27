@@ -110,7 +110,42 @@
     - Flags metadata, heading, content, links, image, and structured-data parity issues between pre-render and post-render states.
     - Helps diagnose CSR / hydration problems that can hide content or links from crawlers.
     - Exports terminal, JSON, HTML, and Markdown reports for debugging and CI workflows.
-18. **Production-Ready Reporting**:
+18. **Business Directory Presence & NAP Consistency Audit (`directories` command)**:
+    - Detects business listings across major directories and local citation sources.
+    - Extracts source-site NAP data (name, phone, address, website) and compares it against candidate listings.
+    - Classifies listings as `Issues not found`, `Wrong Phone Number`, `Wrong Business Name`, `No Phone Number`, `Not Present`, or `Search failed`.
+    - Uses a resilient HTTP search cascade (`Bing -> Brave -> Mojeek -> DuckDuckGo`) with optional SerpAPI or Playwright fallback.
+    - Outputs terminal tables or raw JSON for citation cleanup, local SEO audits, and missed-opportunity reporting.
+19. **Audit Snapshots & Diff**:
+    - Save audit snapshots automatically with `--save` flag
+    - Compare current audit against previous snapshot with `--diff`
+    - CI mode with regression detection (`--diff --ci`) fails only on regressions
+    - Stores snapshots in `./.seocore/history/<host>/` directory
+
+20. **Explain & Dry-Run UX**:
+    - Preview audit configuration without crawling with `--dry-run`
+    - Explains active tier, enabled modules, page budget, and active rules
+    - `seocore rules explain <rule-id>` shows detailed rule information
+    - `seocore tier explain <tier>` shows tier capabilities and configuration
+
+21. **Schema Graph Explorer**:
+    - Analyze structured data entities and their relationships
+    - Detects broken references, duplicate entities, and schema coverage gaps
+    - Exports in terminal, JSON, HTML, and Mermaid diagram formats
+
+22. **Internal Link Planner**:
+    - Generates actionable internal linking recommendations
+    - Identifies orphan pages and low-authority priority pages
+    - Suggests source/target page pairs with anchor text themes
+    - Highlights high-leverage hub pages
+
+23. **Search Opportunities Analyzer**:
+    - Combines crawl findings with optional GSC/CrUX data
+    - Prioritizes opportunities by estimated business impact and ease-of-fix
+    - Works without external providers using heuristic-based ranking
+    - Identifies metadata, performance, indexing, internal links, schema, and content opportunities
+
+24. **Production-Ready Reporting**:
 
     - Real-time colored terminal logging via custom EventBus.
     - Exports rich, detailed audit logs in terminal, JSON, HTML, and SARIF formats.
@@ -177,8 +212,9 @@
    - `images`: Analyze images on a webpage or crawl an entire site for image issues
    - `technology`: Detect website technology stack with evidence-based confidence scores
    - `js-impact`: Compare raw HTML vs rendered DOM for JavaScript SEO impact
+   - `directories`: Check business directory presence and NAP consistency across citation sources
    - `inspect`: Single-aspect probes (robots, sitemap, schema, hreflang, backlinks, rank, screenshot, llms-txt)
-   - `analyze`: Analyzer-driven deep dives (content, ai-visibility)
+   - `analyze`: Analyzer-driven deep dives (content, ai-visibility, schema-graph, link-plan, opportunities)
    - `config`: Manage and validate SEO config
    - `rules`: Manage and inspect SEO validation rules
    - `tier`: Manage execution tiers
@@ -227,6 +263,33 @@
   seocore audit https://example.com --format html --output ./seocore-report.html
    ```
 
+   Save audit snapshot for later comparison:
+   ```bash
+  seocore audit https://example.com --save
+   ```
+
+   Compare current audit against previous snapshot:
+   ```bash
+  seocore audit https://example.com --diff
+   ```
+
+   Save new snapshot and compare with previous:
+   ```bash
+  seocore audit https://example.com --save --diff
+   ```
+
+   CI mode - fail on regressions only:
+   ```bash
+  seocore audit https://example.com --diff --ci
+   ```
+
+   Dry-run - preview what will be audited without crawling:
+   ```bash
+  seocore audit https://example.com --dry-run
+   ```
+
+   **Audit Flags:** `--save`, `--diff`, `--ci`, `--dry-run`, `--history-dir <path>` (custom snapshot directory)
+
    #### 3. Run Crawler Only
    Map site structure and list HTTP responses without executing SEO rules or scoring:
    ```bash
@@ -244,6 +307,11 @@
   seocore rules describe <rule-id>
    ```
 
+   Explain a specific rule in detail:
+   ```bash
+  seocore rules explain <rule-id>
+   ```
+
    #### 5. Manage Execution Tiers
    List all available tiers, their capabilities, and configurations:
    ```bash
@@ -253,6 +321,11 @@
    Describe a specific tier:
    ```bash
   seocore tier describe <tier-name>
+   ```
+
+   Explain a specific tier in detail:
+   ```bash
+  seocore tier explain <tier-name>
    ```
 
    #### 6. Analyze AI Visibility & Structure
@@ -282,12 +355,62 @@
   seocore analyze content https://example.com --format html --output content-report.html
    ```
 
-   CI Mode with budgets:
+   CI mode with budgets:
    ```bash
   seocore analyze content https://example.com --ci --budget-eeat 70 --budget-content 75
    ```
 
-   #### 8. Inspect Single Aspects
+   #### 7. Analyze Schema Graph
+   Explore structured data entities, relationships, and schema completeness:
+   ```bash
+  seocore analyze schema-graph https://example.com
+   ```
+
+   Export as Mermaid diagram:
+   ```bash
+  seocore analyze schema-graph https://example.com --format mermaid
+   ```
+
+   Export as JSON or HTML:
+   ```bash
+  seocore analyze schema-graph https://example.com --format json
+  seocore analyze schema-graph https://example.com --format html --output schema-graph.html
+   ```
+
+   **Schema Graph Flags:** `--format terminal|json|html|mermaid`, `-o <path>`
+
+   #### 8. Analyze Internal Link Plan
+   Generate actionable internal linking recommendations:
+   ```bash
+  seocore analyze link-plan https://example.com
+   ```
+
+   Show top N recommendations:
+   ```bash
+  seocore analyze link-plan https://example.com --top 20
+   ```
+
+   Export as JSON:
+   ```bash
+  seocore analyze link-plan https://example.com --format json --output link-plan.json
+   ```
+
+   **Link Plan Flags:** `--top <number>`, `--format terminal|json`, `-o <path>`
+
+   #### 9. Analyze Search Opportunities
+   Identify high-impact SEO opportunities:
+   ```bash
+  seocore analyze opportunities https://example.com
+   ```
+
+   Export as JSON:
+   ```bash
+  seocore analyze opportunities https://example.com --format json --output opportunities.json
+   ```
+
+   **Opportunities Flags:** `--format terminal|json`, `-o <path>`, `--with-gsc` (with GSC integration), `--with-crux` (with CrUX integration)
+
+   #### 10. Inspect Single Aspects
    The `inspect` command has subcommands for individual checks:
 
    - **robots**: Verify robots.txt access rules, exclusions, and sitemap references
@@ -343,13 +466,13 @@
     seocore inspect screenshot https://example.com --breakpoints mobile,tablet,desktop
      ```
 
-   #### 9. Compare Site Audits
+   #### 11. Compare Site Audits
    Compare SEO health scores, metadata differences, and performance metrics across two websites or audit files:
    ```bash
   seocore compare https://site-a.com https://site-b.com --focus technical
    ```
 
-   #### 10. Audit Images (SEO + Performance)
+   #### 12. Audit Images (SEO + Performance)
    Audit images on a single page or across the site for weight, format, delivery, CLS, LCP, alt text, caching, and broken URLs. See [docs/commands/images.md](docs/commands/images.md) for the full rule catalog.
 
    Single page (default):
@@ -379,7 +502,7 @@
 
    **Flags:** `--crawl`, `--playwright`, `--threshold-kb` (default 100), `--concurrency` (default 10), `--max-images` (default 500), `--user-agent`, `--timeout` (default 30000ms), `-f json|html`, `-o <path>`.
 
-   #### 11. Audit Web Technology Stack
+   #### 13. Audit Web Technology Stack
    Identify framework, CDN, hosting, CMS, libraries, analytics, fonts, and external APIs with confidence ratings:
    ```bash
   seocore technology https://example.com
@@ -395,7 +518,7 @@
   seocore technology https://example.com --format html --output ./technology-report.html
    ```
 
-   #### 12. Audit JavaScript SEO Impact
+   #### 14. Audit JavaScript SEO Impact
    Compare raw source HTML against rendered DOM to see what JavaScript changes for crawlers. See [docs/js-impact.md](docs/js-impact.md) for command details and output reference.
    ```bash
   seocore js-impact https://example.com
@@ -413,6 +536,38 @@
    ```
 
    **Flags:** `--wait-event load|domcontentloaded|networkidle`, `--timeout-ms`, `--wait-extra-ms`, `-o terminal|json|html|markdown`, `--output-file <path>`.
+
+   #### 15. Audit Business Directory Presence
+   Check whether a business appears on key local/business directories and whether the listing NAP matches the source website:
+   ```bash
+ seocore directories https://example.com
+   ```
+
+   Force the multi-engine HTTP cascade search mode:
+   ```bash
+ seocore directories https://example.com --provider cascade
+   ```
+
+   Use live browser search when HTML search engines are blocked:
+   ```bash
+ seocore directories https://example.com --provider playwright --show
+   ```
+
+   Export citation results as JSON:
+   ```bash
+ seocore directories https://example.com --json --output ./directories-report.json
+   ```
+
+   **Search providers:**
+   - `auto`: Use `SERPAPI_KEY` if present, otherwise use the HTTP cascade and fall back to Playwright when needed.
+   - `serpapi`: Most reliable live-search mode when `SERPAPI_KEY` is configured.
+   - `cascade`: HTTP-first search chain using `Bing -> Brave -> Mojeek -> DuckDuckGo`.
+   - `duckduckgo`: Force DuckDuckGo HTML search only.
+   - `playwright`: Browser-driven live search for sites that block HTML endpoints.
+
+   **Flags:** `--provider auto|serpapi|cascade|duckduckgo|playwright`, `--show`, `--concurrency` (default 4), `--max-candidates` (default 3), `--json`, `-f terminal|json`, `-o <path>`.
+
+   **Typical statuses:** `Issues not found`, `Wrong Phone Number`, `Wrong Business Name`, `No Phone Number`, `Not Present`, `Search failed`.
 
    ### SDK Integration
 
