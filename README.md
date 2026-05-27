@@ -398,9 +398,19 @@
    **Link Plan Flags:** `--top <number>`, `--format terminal|json`, `-o <path>`
 
    #### 9. Analyze Search Opportunities
-   Identify high-impact SEO opportunities:
+   Identify high-impact, page-level organic search opportunities ranked by deterministic business impact and ease of fix:
    ```bash
   seocore analyze opportunities https://example.com
+   ```
+
+   Show only top opportunities:
+   ```bash
+  seocore analyze opportunities https://example.com --top 25
+   ```
+
+   Show only medium/high opportunities:
+   ```bash
+  seocore analyze opportunities https://example.com --min-priority medium
    ```
 
    Export as JSON:
@@ -408,7 +418,45 @@
   seocore analyze opportunities https://example.com --format json --output opportunities.json
    ```
 
-   **Opportunities Flags:** `--format terminal|json`, `-o <path>`, `--with-gsc` (with GSC integration), `--with-crux` (with CrUX integration)
+   Export as HTML (with rich summary cards and action plan metrics):
+   ```bash
+  seocore analyze opportunities https://example.com --format html --output opportunities.html
+   ```
+
+   Enrich with Google Search Console or CrUX field performance data:
+   ```bash
+  seocore analyze opportunities https://example.com --with-gsc --gsc-file ./gsc-pages.json --with-crux --crux-file ./crux-pages.json
+   ```
+
+   Run deeper crawl with explicit limits:
+   ```bash
+  seocore analyze opportunities https://example.com --full --depth 5 --max-pages 100
+   ```
+
+   Show verbose ranking inputs and loader warnings:
+   ```bash
+  seocore analyze opportunities https://example.com --verbose
+   ```
+
+   **Opportunities Flags:**
+   - `-f, --format <terminal|json|html>`: Output format (default: terminal)
+   - `-o, --output <path>`: Export file path
+   - `--with-gsc`: Include GSC metrics
+   - `--gsc-file <path>`: GSC JSON export file path
+   - `--with-crux`: Include CrUX performance metrics
+   - `--crux-file <path>`: CrUX JSON export file path
+   - `--full`: Crawl the entire site using the command's larger default budget
+   - `-d, --depth <number>`: Override crawl depth limit
+   - `-m, --max-pages <number>`: Override maximum crawled pages
+   - `--top <n>`: Limit shown/exported top items
+   - `--min-priority <low|medium|high>`: Filter minimum priority to display
+   - `--verbose`: Show full scoring inputs and warnings
+
+   **Notes:**
+   - Works without external providers using crawl heuristics only.
+   - `--with-gsc` and `--with-crux` improve ranking quality but are optional.
+   - If `--gsc-file` or `--crux-file` is omitted, the command falls back to `./gsc-pages.json` and `./crux-pages.json`.
+   - Output is site-level analysis with page-level prioritized actions, not a full enterprise audit replacement.
 
    #### 10. Inspect Single Aspects
    The `inspect` command has subcommands for individual checks:

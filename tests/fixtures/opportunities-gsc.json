@@ -1,0 +1,23 @@
+[
+  {
+    "page": "https://example.com/",
+    "impressions": 5000,
+    "clicks": 50,
+    "ctr": 0.01,
+    "position": 5.2
+  },
+  {
+    "page": "https://example.com/product/xyz",
+    "impressions": 1500,
+    "clicks": 5,
+    "ctr": 0.003,
+    "position": 12.1
+  },
+  {
+    "page": "https://example.com/blog/orphan",
+    "impressions": 200,
+    "clicks": 2,
+    "ctr": 0.01,
+    "position": 18.5
+  }
+]

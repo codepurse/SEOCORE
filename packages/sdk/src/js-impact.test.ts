@@ -39,7 +39,7 @@ describe('JsImpact Zod schemas', () => {
         networkIdleMs: 3000,
       },
       bytes: { raw: 15000, rendered: 45000, deltaPct: 200 },
-      consoleErrors: [],
+      consoleMessages: [],
       failedRequests: [],
     },
     diffs: [validDiff],

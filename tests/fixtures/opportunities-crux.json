@@ -1,0 +1,8 @@
+[
+  {
+    "page": "https://example.com/product/xyz",
+    "lcp": 4500,
+    "cls": 0.15,
+    "inp": 220
+  }
+]
