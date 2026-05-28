@@ -9,19 +9,31 @@ import { JsImpactTerminalReporter } from '../../reporters/js-impact-terminal.js'
 import { JsImpactJsonReporter } from '../../reporters/js-impact-json.js';
 import { JsImpactHtmlReporter } from '../../reporters/js-impact-html.js';
 import { JsImpactMarkdownReporter } from '../../reporters/js-impact-markdown.js';
+import { buildHelp } from '../../shared/help.js';
 
 export function command(): Command {
-  return new Command('js-impact')
-    .description('Compare raw vs rendered HTML for JavaScript SEO impact')
-    .argument('<url>', 'URL to analyze')
-    .option('-w, --wait-event <event>', 'Wait event before capture (load, domcontentloaded, networkidle)', 'networkidle')
-    .option('-t, --timeout-ms <ms>', 'Timeout in milliseconds', '30000')
-    .option('-e, --wait-extra-ms <ms>', 'Extra wait time in milliseconds', '0')
-    .option('-o, --output <format>', 'Output format (terminal, json, html, markdown)', 'terminal')
-    .option('--output-file <path>', 'Output file for non-terminal formats')
-    .option('-c, --config <path>', 'Path to seocore.config.json file')
-    .addHelpText('after', '\nExamples:\n  seo js-impact https://example.com\n  seo js-impact https://example.com --output html --output-file report.html\n  seo js-impact https://example.com --wait-event load --timeout-ms 45000')
-    .action(handler);
+  return buildHelp(
+    new Command('js-impact')
+      .description('Compare raw vs rendered HTML for JavaScript SEO impact')
+      .argument('<url>', 'URL to analyze')
+      .option('-w, --wait-event <event>', 'Wait event before capture (load, domcontentloaded, networkidle)', 'networkidle')
+      .option('-t, --timeout-ms <ms>', 'Timeout in milliseconds', '30000')
+      .option('-e, --wait-extra-ms <ms>', 'Extra wait time in milliseconds', '0')
+      .option('-o, --output <format>', 'Output format (terminal, json, html, markdown)', 'terminal')
+      .option('--output-file <path>', 'Output file for non-terminal formats')
+      .option('-c, --config <path>', 'Path to seocore.config.json file')
+      .action(handler),
+    [
+      {
+        title: 'Examples',
+        lines: [
+          'seocore js-impact https://example.com',
+          'seocore js-impact https://example.com --output html --output-file ./js-impact-report.html',
+          'seocore js-impact https://example.com --wait-event load --timeout-ms 45000',
+        ],
+      },
+    ]
+  );
 }
 
 async function handler(urlArg: string, options: any): Promise<void> {

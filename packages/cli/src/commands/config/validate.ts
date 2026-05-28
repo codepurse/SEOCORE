@@ -1,76 +1,40 @@
 import { Command } from 'commander';
 import pc from 'picocolors';
-import { validateUrl } from '../../shared/index.js';
-import { Spinner } from '../../shared/index.js';
-import { resolveConfig } from '@seocore/config';
-import { HttpCrawler } from '@seocore/crawler';
-import { PageNormalizer, SchemaValidator } from '@seocore/analyzers';
-import { SchemaReporter } from '../../validate/reporter.js';
+import { resolveConfig, initConfigFile } from '@seocore/config';
+import * as path from 'node:path';
 
 export function command(): Command {
   return new Command('validate')
-    .description('Validate Schema.org structured data')
-    .argument('<url>', 'Target URL')
-    .option('--schema <types>', 'Filter to specific schema types (comma-separated)')
+    .description('Validate seocore config file')
+    .option('-c, --config <path>', 'Path to config file')
     .option('--json', 'Output raw JSON')
-    .option('-f, --format <format>', 'Output format: terminal, json, sarif', 'terminal')
-    .option('-o, --output <path>', 'Export to file')
     .action(handler);
 }
 
-export async function handler(url: string, options: any): Promise<void> {
+export async function handler(options: any): Promise<void> {
   try {
-    validateUrl(url);
+    console.log(pc.cyan('\nValidating seocore config file...\n'));
 
-    const config = resolveConfig();
-    const spinner = new Spinner('Validating Schema.org structured data...');
-    if (options.format !== 'json' && !options.json) spinner.start();
+    // Try to resolve config (will throw if invalid)
+    const config = resolveConfig({}, options.config);
 
-    const crawler = new HttpCrawler();
-    const crawlResult = await crawler.crawl(url, config);
+    console.log(pc.green('✅ Config file is valid!\n'));
 
-    if (crawlResult.error) {
-      throw new Error(crawlResult.error);
-    }
-
-    const normalizedPage = PageNormalizer.normalize(crawlResult);
-    const validator = new SchemaValidator();
-    let validationResult = validator.validate(normalizedPage.structuredData, url, normalizedPage);
-
-    if (options.schema) {
-      const targetTypes = options.schema.split(',').map((t: string) => t.trim().toLowerCase());
-      validationResult = {
-        ...validationResult,
-        schemas: validationResult.schemas.filter((schema: any) =>
-          targetTypes.includes(schema.type.toLowerCase())
-        )
-      };
-      validationResult.totalSchemas = validationResult.schemas.length;
-      validationResult.validSchemas = validationResult.schemas.filter((s: any) => s.valid).length;
-      validationResult.invalidSchemas = validationResult.totalSchemas - validationResult.validSchemas;
-      validationResult.totalErrors = validationResult.schemas.reduce((sum: number, s: any) => sum + s.issues.filter((i: any) => i.level === 'error').length, 0);
-      validationResult.totalWarnings = validationResult.schemas.reduce((sum: number, s: any) => sum + s.issues.filter((i: any) => i.level === 'warning').length, 0);
-    }
-
-    if (options.format !== 'json' && !options.json && options.format !== 'sarif') spinner.stop('Validation complete!');
-
-    if (options.json || options.format === 'json') {
-      SchemaReporter.reportJson(validationResult, options.output);
-    } else if (options.format === 'sarif') {
-      SchemaReporter.reportSarif(validationResult, options.output || './seocore-schema-report.sarif');
+    if (options.json) {
+      console.log(JSON.stringify(config, null, 2));
     } else {
-      SchemaReporter.reportTerminal(validationResult);
-      if (options.output) {
-        if (options.output.endsWith('.sarif')) {
-          SchemaReporter.reportSarif(validationResult, options.output);
-        } else {
-          SchemaReporter.reportJson(validationResult, options.output);
-        }
-      }
+      console.log('Resolved config:');
+      console.log(`  Tier/Preset: ${config.tier || config.preset}`);
+      console.log(`  Concurrency: ${config.concurrency}`);
+      console.log(`  Max pages: ${config.maxPages}`);
+      console.log(`  Max depth: ${config.maxDepth}`);
+      console.log(`  Playwright: ${config.playwrightEnabled ? 'enabled' : 'disabled'}`);
+      console.log(`  Exclude patterns: ${config.excludePatterns.length > 0 ? config.excludePatterns.join(', ') : 'none'}`);
+      console.log(`  Include patterns: ${config.includePatterns.length > 0 ? config.includePatterns.join(', ') : 'none'}`);
     }
 
   } catch (err: any) {
-    console.error(pc.red(`\nValidation failed: ${err.message}`));
+    console.error(pc.red(`\nConfig validation failed: ${err.message}`));
     process.exit(1);
   }
 }

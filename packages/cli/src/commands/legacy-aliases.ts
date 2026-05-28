@@ -11,7 +11,7 @@ import { handler as screenshotHandler } from './inspect/screenshot.js';
 import { handler as contentHandler } from './analyze/content.js';
 import { handler as aiVisibilityHandler } from './analyze/ai-visibility.js';
 import { handler as configInitHandler } from './config/init.js';
-import { handler as configValidateHandler } from './config/validate.js';
+
 import { handler as rulesListHandler } from './rules/list.js';
 import { handler as tierListHandler } from './tier/list.js';
 
@@ -75,8 +75,8 @@ export function registerLegacyAliases(program: Command): void {
     .option('-f, --format <format>', 'Output format: terminal, json, sarif', 'terminal')
     .option('-o, --output <path>', 'Export to file')
     .action(async (url, opts) => {
-      showWarning('config validate <url>');
-      await configValidateHandler(url, opts);
+      showWarning('inspect schema <url>');
+      await schemaHandler(url, opts);
     });
 
   program

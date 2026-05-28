@@ -380,7 +380,7 @@
    **Schema Graph Flags:** `--format terminal|json|html|mermaid`, `-o <path>`
 
    #### 8. Analyze Internal Link Plan
-   Generate actionable internal linking recommendations:
+   Generate actionable internal linking recommendations with ranked source → target suggestions, orphan page detection, and hub identification:
    ```bash
   seocore analyze link-plan https://example.com
    ```
@@ -395,7 +395,26 @@
   seocore analyze link-plan https://example.com --format json --output link-plan.json
    ```
 
-   **Link Plan Flags:** `--top <number>`, `--format terminal|json`, `-o <path>`
+   Export as HTML report:
+   ```bash
+  seocore analyze link-plan https://example.com --format html --output link-plan.html
+   ```
+
+   Full site crawl with high-confidence filter:
+   ```bash
+  seocore analyze link-plan https://example.com --full --min-confidence 60
+   ```
+
+   **Link Plan Flags:**
+   - `--top <number>` — Limit suggestions displayed
+   - `--format terminal|json|html` — Output format (default: terminal)
+   - `-o, --output <path>` — Export file path
+   - `--full` — Crawl entire site (100 pages, depth 5)
+   - `-d, --depth <number>` — Crawl depth limit (default: 3)
+   - `-m, --max-pages <number>` — Maximum pages to crawl (default: 50)
+   - `--min-confidence <number>` — Minimum confidence threshold 0-100 (default: 0)
+   - `--max-suggestions-per-target <number>` — Max suggestions per target page (default: 5)
+   - `--verbose` — Show additional diagnostic details (scores, signals)
 
    #### 9. Analyze Search Opportunities
    Identify high-impact, page-level organic search opportunities ranked by deterministic business impact and ease of fix:

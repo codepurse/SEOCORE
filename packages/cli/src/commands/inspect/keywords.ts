@@ -5,21 +5,35 @@ import { performKeywordResearch, KeywordIntelligence, SearchIntent } from '../..
 import { resolveConfig } from '@seocore/config';
 import fs from 'node:fs';
 import path from 'node:path';
+import { buildHelp } from '../../shared/help.js';
 
 export function command(): Command {
-  return new Command('keywords')
-    .description('Perform advanced SEO keyword research and cluster intelligence')
-    .argument('<keyword>', 'Seed keyword to research')
-    .option('-e, --expand', 'Perform exhaustive question and alphabetical lookup', false)
-    .option('-l, --lang <lang>', 'Language code for suggestions')
-    .option('-c, --country <country>', 'Country code for suggestions')
-    .option('--include-brands', 'Keep branded/entity-heavy keywords in results', false)
-    .option('--strict-noise-filter', 'Hard-filter more brand/entity noise before clustering', false)
-    .option('--config <path>', 'Path to seocore.config.json file')
-    .option('--json', 'Output results in raw JSON format', false)
-    .option('-f, --format <format>', 'Output format: terminal, json, csv, txt', 'terminal')
-    .option('-o, --output <path>', 'Export results to a file')
-    .action(handler);
+  return buildHelp(
+    new Command('keywords')
+      .description('Perform advanced SEO keyword research and cluster intelligence')
+      .argument('<keyword>', 'Seed keyword to research')
+      .option('-e, --expand', 'Perform exhaustive question and alphabetical lookup', false)
+      .option('-l, --lang <lang>', 'Language code for suggestions')
+      .option('-c, --country <country>', 'Country code for suggestions')
+      .option('--include-brands', 'Keep branded/entity-heavy keywords in results', false)
+      .option('--strict-noise-filter', 'Hard-filter more brand/entity noise before clustering', false)
+      .option('--config <path>', 'Path to seocore.config.json file')
+      .option('--json', 'Output results in raw JSON format', false)
+      .option('-f, --format <format>', 'Output format: terminal, json, csv, txt', 'terminal')
+      .option('-o, --output <path>', 'Export results to a file')
+      .action(handler),
+    [
+      {
+        title: 'Examples',
+        lines: [
+          'seocore inspect keywords "behavioral health"',
+          'seocore inspect keywords "behavioral health" --expand',
+          'seocore inspect keywords "behavioral health" --lang en --country us --strict-noise-filter',
+          'seocore inspect keywords "behavioral health" --format csv --output ./keywords.csv',
+        ],
+      },
+    ]
+  );
 }
 
 function toCSV(data: KeywordIntelligence): string {

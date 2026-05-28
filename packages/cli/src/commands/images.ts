@@ -1,8 +1,19 @@
 import { Command } from 'commander';
 import { runImagesCommand } from '../images/index.js';
+import { buildHelp } from '../shared/help.js';
 
 export function command(): Command {
-  const cmd = new Command('images');
+  const cmd = buildHelp(new Command('images'), [
+    {
+      title: 'Examples',
+      lines: [
+        'seocore images https://example.com',
+        'seocore images https://example.com --crawl',
+        'seocore images https://example.com --playwright --format json --output ./images-report.json',
+        'seocore images https://example.com --crawl --playwright --output ./seocore-images-report.html',
+      ],
+    },
+  ]);
 
   cmd
     .description('Analyze images on a webpage or crawl an entire site for image issues')

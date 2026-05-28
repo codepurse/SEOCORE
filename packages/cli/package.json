@@ -1,41 +1,59 @@
 {
-  "name": "@seocore/cli",
+  "name": "seocore",
   "version": "1.0.0",
-  "private": true,
+  "description": "Enterprise-grade SEO crawler and auditing CLI.",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
   "bin": {
     "seocore": "./dist/index.js"
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
-    "build": "tsc"
+    "build": "node ./scripts/build.mjs",
+    "prepack": "npm run build"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/seocore/seocore.git"
+  },
+  "homepage": "https://github.com/seocore/seocore#readme",
+  "bugs": {
+    "url": "https://github.com/seocore/seocore/issues"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "seo",
+    "crawler",
+    "audit",
+    "cli",
+    "performance"
+  ],
   "dependencies": {
-    "@seocore/backlinks": "*",
-    "@seocore/config": "*",
-    "@seocore/engine": "*",
-    "@seocore/plugin-backlinks": "*",
-    "@seocore/reporter": "*",
-    "@seocore/rule-utils": "*",
-    "@seocore/rules-core": "*",
-    "@seocore/rules-performance": "*",
-    "@seocore/rules-mobile": "*",
-    "@seocore/rules-ai-visibility": "*",
-    "@seocore/rules-security": "*",
-    "@seocore/rules-hreflang": "*",
-    "@seocore/scoring-core": "*",
-    "@seocore/sdk": "*",
     "chalk": "^5.6.2",
     "commander": "^12.1.0",
     "inquirer": "^13.4.3",
     "node-fetch": "^3.3.2",
     "sharp": "^0.33.5",
     "axios": "^1.7.2",
-    "picocolors": "^1.0.1"
+    "bottleneck": "^2.19.5",
+    "cheerio": "^1.0.0-rc.12",
+    "lighthouse": "^12.8.2",
+    "p-queue": "^9.3.0",
+    "picocolors": "^1.0.1",
+    "playwright": "^1.60.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/inquirer": "^9.0.9",
-    "@types/node-fetch": "^2.6.13"
+    "@types/node-fetch": "^2.6.13",
+    "esbuild": "^0.28.0"
   }
 }

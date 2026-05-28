@@ -17,8 +17,39 @@ import { group as rulesGroup } from './commands/rules/index.js';
 import { group as tierGroup } from './commands/tier/index.js';
 
 import { registerLegacyAliases } from './commands/legacy-aliases.js';
+import { buildHelp } from './shared/help.js';
 
-const program = new Command();
+const program = buildHelp(new Command(), [
+  {
+    title: 'Quick Start',
+    lines: [
+      'seocore audit https://example.com',
+      'seocore audit https://example.com --full --format html --output ./seocore-report.html',
+      'seocore inspect sitemap https://example.com --check-links',
+      'seocore analyze link-plan https://example.com --top 20',
+      'seocore config init',
+    ],
+  },
+  {
+    title: 'Command Map',
+    lines: [
+      'audit | crawl | compare | images | technology | js-impact | directories',
+      'inspect robots|sitemap|llms-txt|schema|hreflang|backlinks|rank|screenshot|keywords',
+      'analyze ai-visibility|content|schema-graph|link-plan|opportunities',
+      'config init|show|validate',
+      'rules list|describe|explain',
+      'tier list|describe|explain',
+    ],
+  },
+  {
+    title: 'Help Tips',
+    lines: [
+      'seocore <command> --help',
+      'seocore inspect <subcommand> --help',
+      'seocore analyze <subcommand> --help',
+    ],
+  },
+]);
 
 program
   .name('seocore')

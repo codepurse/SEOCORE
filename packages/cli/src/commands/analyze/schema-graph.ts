@@ -4,17 +4,31 @@ import { SeoEngine } from '@seocore/engine';
 import { EventBus } from '@seocore/sdk';
 import { SchemaGraphAnalyzer } from '@seocore/analyzers';
 import { validateUrl } from '../../shared/index.js';
+import { buildHelp } from '../../shared/help.js';
 
 export function command(): Command {
-  return new Command('schema-graph')
-    .description('Analyze structured data entity relationships and graph completeness')
-    .argument('<url>', 'Target website starting URL')
-    .option('-f, --format <format>', 'Output format: terminal, json, mermaid, html', 'terminal')
-    .option('-o, --output <path>', 'Export file path')
-    .option('--full', 'Crawl the entire site', false)
-    .option('-d, --depth <number>', 'Crawl depth limit', parseInt)
-    .option('-m, --max-pages <number>', 'Maximum pages to crawl', parseInt)
-    .action(handler);
+  return buildHelp(
+    new Command('schema-graph')
+      .description('Analyze structured data entity relationships and graph completeness')
+      .argument('<url>', 'Target website starting URL')
+      .option('-f, --format <format>', 'Output format: terminal, json, mermaid, html', 'terminal')
+      .option('-o, --output <path>', 'Export file path')
+      .option('--full', 'Crawl the entire site', false)
+      .option('-d, --depth <number>', 'Crawl depth limit', parseInt)
+      .option('-m, --max-pages <number>', 'Maximum pages to crawl', parseInt)
+      .action(handler),
+    [
+      {
+        title: 'Examples',
+        lines: [
+          'seocore analyze schema-graph https://example.com',
+          'seocore analyze schema-graph https://example.com --format mermaid',
+          'seocore analyze schema-graph https://example.com --format html --output ./schema-graph.html',
+          'seocore analyze schema-graph https://example.com --full --max-pages 100',
+        ],
+      },
+    ]
+  );
 }
 
 async function handler(url: string, options: any): Promise<void> {

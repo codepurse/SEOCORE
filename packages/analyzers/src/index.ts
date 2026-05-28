@@ -17,7 +17,7 @@ export { TechnologyContextBuilder, type TechnologyContext } from './technology-c
 export * from './js-impact/index.js';
 export { JsImpactAnalyzer } from './js-impact/js-impact-analyzer.js';
 export { SchemaGraphAnalyzer, type SchemaGraphAnalysisResult, type SchemaEntityNode, type SchemaEntityEdge, type UnresolvedSchemaReference, type SchemaEntityConflict, type SchemaCoverageSummary } from './schema-graph-report.js';
-export { LinkPlanAnalyzer, type LinkPlanResult, type PlannedTarget, type HubSummary, type LinkSuggestion } from './link-plan.js';
+export { LinkPlanAnalyzer, type LinkPlanResult, type PlannedTarget, type HubSummary, type LinkSuggestion, type SuggestionOptions } from './link-plan.js';
 export { OpportunitiesAnalyzer, type OpportunitiesResult, type SearchOpportunity, type GscMetrics, type CruxMetrics, type PageSearchData, loadGscFile, loadCruxFile } from './opportunities.js';
 
 export class PageNormalizer {

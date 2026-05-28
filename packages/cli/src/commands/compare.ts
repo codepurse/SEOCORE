@@ -5,18 +5,31 @@ import { Command } from 'commander';
 import fs from 'fs';
 import path from 'path';
 import pc from 'picocolors';
+import { buildHelp } from '../shared/help.js';
 
 export function command(): Command {
-  return new Command('compare')
-    .description('Compare two websites or SEO audit reports')
-    .argument('<source1>', 'First URL or audit report JSON file')
-    .argument('<source2>', 'Second URL or audit report JSON file')
-    .option('--name1 <name>', 'Name for first site')
-    .option('--name2 <name>', 'Name for second site')
-    .option('--focus <type>', 'Focus comparison on: technical, content, ai-visibility, backlinks, mobile')
-    .option('--format <format>', 'Output format: terminal, json, html', 'terminal')
-    .option('--output <path>', 'Output file path for json/html formats')
-    .action(handler);
+  return buildHelp(
+    new Command('compare')
+      .description('Compare two websites or SEO audit reports')
+      .argument('<source1>', 'First URL or audit report JSON file')
+      .argument('<source2>', 'Second URL or audit report JSON file')
+      .option('--name1 <name>', 'Name for first site')
+      .option('--name2 <name>', 'Name for second site')
+      .option('--focus <type>', 'Focus comparison on: technical, content, ai-visibility, backlinks, mobile')
+      .option('--format <format>', 'Output format: terminal, json, html', 'terminal')
+      .option('--output <path>', 'Output file path for json/html formats')
+      .action(handler),
+    [
+      {
+        title: 'Examples',
+        lines: [
+          'seocore compare https://site-a.com https://site-b.com',
+          'seocore compare https://site-a.com https://site-b.com --focus technical',
+          'seocore compare ./audit-a.json ./audit-b.json --format html --output ./comparison.html',
+        ],
+      },
+    ]
+  );
 }
 
 async function getAuditResult(source: string): Promise<AuditResult> {

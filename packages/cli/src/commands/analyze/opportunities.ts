@@ -9,25 +9,39 @@ import {
   PageSearchData,
 } from '@seocore/analyzers';
 import { validateUrl } from '../../shared/index.js';
+import { buildHelp } from '../../shared/help.js';
 import { generateHtmlReport } from './html-reporter.js';
 
 export function command(): Command {
-  return new Command('opportunities')
-    .description('Identify SEO opportunities based on crawl findings and search data')
-    .argument('<url>', 'Target website starting URL')
-    .option('-f, --format <format>', 'Output format: terminal, json, html', 'terminal')
-    .option('-o, --output <path>', 'Export file path')
-    .option('--with-gsc', 'Include GSC data from export file', false)
-    .option('--with-crux', 'Include CrUX field data', false)
-    .option('--gsc-file <path>', 'Path to GSC export JSON file')
-    .option('--crux-file <path>', 'Path to CrUX field data JSON file')
-    .option('--full', 'Crawl the entire site', false)
-    .option('-d, --depth <number>', 'Crawl depth limit', parseInt)
-    .option('-m, --max-pages <number>', 'Maximum pages to crawl', parseInt)
-    .option('--top <n>', 'Limit shown/exported top items', parseInt)
-    .option('--min-priority <priority>', 'Minimum priority to display (low, medium, high)', 'low')
-    .option('--verbose', 'Show full score breakdown and warning counts', false)
-    .action(handler);
+  return buildHelp(
+    new Command('opportunities')
+      .description('Identify SEO opportunities based on crawl findings and search data')
+      .argument('<url>', 'Target website starting URL')
+      .option('-f, --format <format>', 'Output format: terminal, json, html', 'terminal')
+      .option('-o, --output <path>', 'Export file path')
+      .option('--with-gsc', 'Include GSC data from export file', false)
+      .option('--with-crux', 'Include CrUX field data', false)
+      .option('--gsc-file <path>', 'Path to GSC export JSON file')
+      .option('--crux-file <path>', 'Path to CrUX field data JSON file')
+      .option('--full', 'Crawl the entire site', false)
+      .option('-d, --depth <number>', 'Crawl depth limit', parseInt)
+      .option('-m, --max-pages <number>', 'Maximum pages to crawl', parseInt)
+      .option('--top <n>', 'Limit shown/exported top items', parseInt)
+      .option('--min-priority <priority>', 'Minimum priority to display (low, medium, high)', 'low')
+      .option('--verbose', 'Show full score breakdown and warning counts', false)
+      .action(handler),
+    [
+      {
+        title: 'Examples',
+        lines: [
+          'seocore analyze opportunities https://example.com',
+          'seocore analyze opportunities https://example.com --top 25 --min-priority medium',
+          'seocore analyze opportunities https://example.com --with-gsc --gsc-file ./gsc-pages.json --with-crux --crux-file ./crux-pages.json',
+          'seocore analyze opportunities https://example.com --format html --output ./opportunities.html',
+        ],
+      },
+    ]
+  );
 }
 
 async function handler(url: string, options: any): Promise<void> {

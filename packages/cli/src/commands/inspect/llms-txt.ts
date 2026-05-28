@@ -5,18 +5,31 @@ import { HttpCrawler, LlmsTxtParser } from '@seocore/crawler';
 import { resolveConfig } from '@seocore/config';
 import fs from 'fs';
 import path from 'path';
+import { buildHelp } from '../../shared/help.js';
 
 export function command(): Command {
-  return new Command('llms-txt')
-    .description('Check a website\'s llms.txt file for AI crawler directives')
-    .argument('<url>', 'Target website URL')
-    .option('--json', 'Output results in raw JSON format', false)
-    .option('-f, --format <format>', 'Output format: terminal, json', 'terminal')
-    .option('-o, --output <path>', 'Export to file')
-    .option('--check-bots <bots>', 'Comma-separated list of bots to check', 'GPTBot,ClaudeBot,PerplexityBot,Google-Extended')
-    .option('--check-well-known', 'Also check /.well-known/llms.txt', true)
-    .option('--verbose', 'Show full directive parsing details', false)
-    .action(handler);
+  return buildHelp(
+    new Command('llms-txt')
+      .description('Check a website\'s llms.txt file for AI crawler directives')
+      .argument('<url>', 'Target website URL')
+      .option('--json', 'Output results in raw JSON format', false)
+      .option('-f, --format <format>', 'Output format: terminal, json', 'terminal')
+      .option('-o, --output <path>', 'Export to file')
+      .option('--check-bots <bots>', 'Comma-separated list of bots to check', 'GPTBot,ClaudeBot,PerplexityBot,Google-Extended')
+      .option('--no-check-well-known', 'Skip /.well-known/llms.txt check')
+      .option('--verbose', 'Show full directive parsing details', false)
+      .action(handler),
+    [
+      {
+        title: 'Examples',
+        lines: [
+          'seocore inspect llms-txt https://example.com',
+          'seocore inspect llms-txt https://example.com --check-bots GPTBot,ClaudeBot',
+          'seocore inspect llms-txt https://example.com --no-check-well-known --verbose',
+        ],
+      },
+    ]
+  );
 }
 
 export async function handler(url: string, options: any): Promise<void> {

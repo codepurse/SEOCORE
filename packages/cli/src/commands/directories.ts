@@ -7,20 +7,34 @@ import path from 'path';
 import { validateUrl, Spinner } from '../shared/index.js';
 import { runDirectoryScan } from '../directories/index.js';
 import { DirectoryReporter } from '../directories/reporter.js';
+import { buildHelp } from '../shared/help.js';
 
 export function command(): Command {
-  return new Command('directories')
-    .alias('directory')
-    .description('Check live business directory presence and NAP consistency')
-    .argument('<url>', 'Target website URL')
-    .option('--json', 'Output results in raw JSON format', false)
-    .option('-f, --format <format>', 'Output format: terminal, json', 'terminal')
-    .option('-o, --output <path>', 'Export to file')
-    .option('--provider <provider>', 'Search provider: auto, serpapi, cascade, duckduckgo, playwright', 'auto')
-    .option('--show', 'Show browser window for Playwright search', false)
-    .option('--concurrency <number>', 'Directories to process in parallel', parseInt, 4)
-    .option('--max-candidates <number>', 'Candidate listings to verify per directory', parseInt, 3)
-    .action(handler);
+  return buildHelp(
+    new Command('directories')
+      .alias('directory')
+      .description('Check live business directory presence and NAP consistency')
+      .argument('<url>', 'Target website URL')
+      .option('--json', 'Output results in raw JSON format', false)
+      .option('-f, --format <format>', 'Output format: terminal, json', 'terminal')
+      .option('-o, --output <path>', 'Export to file')
+      .option('--provider <provider>', 'Search provider: auto, serpapi, cascade, duckduckgo, playwright', 'auto')
+      .option('--show', 'Show browser window for Playwright search', false)
+      .option('--concurrency <number>', 'Directories to process in parallel', parseInt, 4)
+      .option('--max-candidates <number>', 'Candidate listings to verify per directory', parseInt, 3)
+      .action(handler),
+    [
+      {
+        title: 'Examples',
+        lines: [
+          'seocore directories https://example.com',
+          'seocore directories https://example.com --provider cascade',
+          'seocore directories https://example.com --provider playwright --show',
+          'seocore directories https://example.com --format json --output ./directories-report.json',
+        ],
+      },
+    ]
+  );
 }
 
 export async function handler(url: string, options: any): Promise<void> {

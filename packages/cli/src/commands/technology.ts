@@ -1,8 +1,19 @@
 import { Command } from 'commander';
 import { runTechnologyCommand } from '../technology/index.js';
+import { buildHelp } from '../shared/help.js';
 
 export function command(): Command {
-  const cmd = new Command('technology');
+  const cmd = buildHelp(new Command('technology'), [
+    {
+      title: 'Examples',
+      lines: [
+        'seocore technology https://example.com',
+        'seocore technology https://example.com --verbose',
+        'seocore technology https://example.com --format json --output ./technology-report.json',
+        'seocore technology https://example.com --format html --output ./technology-report.html',
+      ],
+    },
+  ]);
 
   cmd
     .description('Detect website technology stack with evidence-based confidence scores')

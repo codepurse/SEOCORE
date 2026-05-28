@@ -5,6 +5,7 @@ import { Command } from 'commander';
 import inquirer from 'inquirer';
 import pc from 'picocolors';
 import { attachStandardEvents, buildPartialConfig, validateTier, validateUrl } from '../shared/index.js';
+import { buildHelp } from '../shared/help.js';
 import { addPerfOptions } from '../shared/options.js';
 import { computeDiff, hasCriticalRegressions } from '../history/diff.js';
 import { saveSnapshot, loadLatestSnapshot } from '../history/snapshot-store.js';
@@ -24,38 +25,53 @@ function parseModuleOverride(input?: string): any {
 }
 
 export function command(): Command {
-  return addPerfOptions(new Command('audit'))
-    .description('Audit a website for SEO, speed, indexing, accessibility, and metadata')
-    .argument('<url>', 'Target website starting URL')
-    .option('-t, --tier <tier>', 'Execution tier: fast, standard, deep, enterprise')
-    .option('-p, --preset <preset>', 'Audit preset: quick, standard, deep, enterprise', 'standard')
-    .option('--full', 'Crawl the entire site based on tier/preset limits', false)
-    .option('-d, --depth <number>', 'Override crawling depth limit', parseInt)
-    .option('-m, --max-pages <number>', 'Override maximum pages to audit', parseInt)
-    .option('-c, --concurrency <number>', 'Override concurrency limit', parseInt)
-    .option('--rate-limit <number>', 'Override rate limit in milliseconds', parseInt)
-    .option('--retry-count <number>', 'Override retry count for failed requests', parseInt)
-    .option('--exclude <pattern...>', 'Exclude URLs matching pattern(s)')
-    .option('--include <pattern...>', 'Only include URLs matching pattern(s)')
-    .option('--playwright', 'Use Playwright headless browser rendering')
-    .option('--lighthouse', 'Enable Lighthouse performance metrics (slower)')
-    .option('--lighthouse-sample <number>', 'Number of pages to sample with Lighthouse', parseInt)
-    .option('-f, --format <format>', 'Output format: terminal, json, html, both, all, sarif', 'terminal')
-    .option('-o, --output <path>', 'Export file path')
-    .option('-v, --verbose', 'Show full diagnostic findings details', false)
-    .option('--min-severity <severity>', 'Minimum severity to show in terminal', 'warning')
-    .option('--ci', 'Enable CI mode (no prompts, non-zero exit codes)', false)
-    .option('--fail-on <severities>', 'Comma-separated severities triggering exit code 1', 'critical,error')
-    .option('--budget-lcp <ms>', 'Largest Contentful Paint budget in ms', parseInt)
-    .option('--budget-cls <number>', 'Cumulative Layout Shift budget', parseFloat)
-    .option('--budget-inp <ms>', 'Interaction to Next Paint budget in ms', parseInt)
-    .option('--budget-js <bytes>', 'Total JavaScript payload budget', parseInt)
-    .option('--module <modules>', 'Comma-separated module override')
-    .option('--save', 'Save audit result as a reusable snapshot', false)
-    .option('--diff', 'Compare current audit against the latest saved snapshot', false)
-    .option('--history-dir <path>', 'Custom history directory for snapshots')
-    .option('--dry-run', 'Show planned tier/modules/rules without crawling', false)
-    .action(handler);
+  return buildHelp(
+    addPerfOptions(new Command('audit'))
+      .description('Audit a website for SEO, speed, indexing, accessibility, and metadata')
+      .argument('<url>', 'Target website starting URL')
+      .option('-t, --tier <tier>', 'Execution tier: fast, standard, deep, enterprise')
+      .option('-p, --preset <preset>', 'Audit preset: quick, standard, deep, enterprise', 'standard')
+      .option('--full', 'Crawl the entire site based on tier/preset limits', false)
+      .option('-d, --depth <number>', 'Override crawling depth limit', parseInt)
+      .option('-m, --max-pages <number>', 'Override maximum pages to audit', parseInt)
+      .option('-c, --concurrency <number>', 'Override concurrency limit', parseInt)
+      .option('--rate-limit <number>', 'Override rate limit in milliseconds', parseInt)
+      .option('--retry-count <number>', 'Override retry count for failed requests', parseInt)
+      .option('--exclude <pattern...>', 'Exclude URLs matching pattern(s)')
+      .option('--include <pattern...>', 'Only include URLs matching pattern(s)')
+      .option('--playwright', 'Use Playwright headless browser rendering')
+      .option('--lighthouse', 'Enable Lighthouse performance metrics (slower)')
+      .option('--lighthouse-sample <number>', 'Number of pages to sample with Lighthouse', parseInt)
+      .option('-f, --format <format>', 'Output format: terminal, json, html, both, all, sarif', 'terminal')
+      .option('-o, --output <path>', 'Export file path')
+      .option('-v, --verbose', 'Show full diagnostic findings details', false)
+      .option('--min-severity <severity>', 'Minimum severity to show in terminal', 'warning')
+      .option('--ci', 'Enable CI mode (no prompts, non-zero exit codes)', false)
+      .option('--fail-on <severities>', 'Comma-separated severities triggering exit code 1', 'critical,error')
+      .option('--budget-lcp <ms>', 'Largest Contentful Paint budget in ms', parseInt)
+      .option('--budget-cls <number>', 'Cumulative Layout Shift budget', parseFloat)
+      .option('--budget-inp <ms>', 'Interaction to Next Paint budget in ms', parseInt)
+      .option('--budget-js <bytes>', 'Total JavaScript payload budget', parseInt)
+      .option('--module <modules>', 'Comma-separated module override')
+      .option('--save', 'Save audit result as a reusable snapshot', false)
+      .option('--diff', 'Compare current audit against the latest saved snapshot', false)
+      .option('--history-dir <path>', 'Custom history directory for snapshots')
+      .option('--dry-run', 'Show planned tier/modules/rules without crawling', false)
+      .action(handler),
+    [
+      {
+        title: 'Examples',
+        lines: [
+          'seocore audit https://example.com',
+          'seocore audit https://example.com --tier fast --format json --output ./audit.json',
+          'seocore audit https://example.com --full --playwright --lighthouse',
+          'seocore audit https://example.com --dry-run',
+          'seocore audit https://example.com --save',
+          'seocore audit https://example.com --diff --ci',
+        ],
+      },
+    ]
+  );
 }
 
 async function handleDiff(
