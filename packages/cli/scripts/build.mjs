@@ -60,9 +60,6 @@ await build({
   target: 'node20',
   packages: 'external',
   sourcemap: true,
-  banner: {
-    js: '#!/usr/bin/env node',
-  },
   logLevel: 'info',
   plugins: [
     {

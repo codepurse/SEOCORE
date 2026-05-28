@@ -175,11 +175,33 @@
 
    ### Prerequisites
    - **Node.js** v20.0.0 or higher
-   - **npm** or **yarn**
+   - **npm**
 
-   ### Steps
+   ### Use as Published CLI
 
-   1. **Clone the repository**:
+   **Global install** (lets you run `seocore` directly):
+
+   ```bash
+   npm install -g seocore
+   seocore config init
+   ```
+
+   **Local project install** (run with `npx`):
+
+   ```bash
+   npm install seocore
+   npx seocore config init
+   ```
+
+   **One-off run** (no install):
+
+   ```bash
+   npx seocore@latest config init
+   ```
+
+   ### Develop from Repository
+
+   1. **Clone repository**:
       ```bash
       git clone https://github.com/codepurse/SEOCORE.git
       cd SEOCORE
@@ -190,7 +212,7 @@
       npm install
       ```
 
-   3. **Build the monorepo**:
+   3. **Build monorepo**:
       ```bash
       npm run build
       ```
@@ -204,6 +226,8 @@
   ### CLI Usage
 
   The core CLI executable is `seocore`.
+  If you installed package locally with `npm install seocore`, run commands as `npx seocore ...`.
+  Examples below use direct `seocore ...` form, which assumes global install via `npm install -g seocore`.
 
   #### Main Commands:
    - `audit`: Audit a website for SEO, speed, indexing, accessibility, and metadata

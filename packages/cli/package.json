@@ -1,6 +1,6 @@
 {
   "name": "seocore",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "Enterprise-grade SEO crawler and auditing CLI.",
   "type": "module",
   "bin": {
