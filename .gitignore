@@ -60,3 +60,13 @@ test-audit-*.json
 test-content-report.*
 test-schema-report.*
 
+# SEOCore runtime data
+.seocore-cache/
+.seocore/
+
+# Private planning notes
+todo-*.md
+steps-*.md
+seo-plan.md
+docs/superpowers/plans/
+
