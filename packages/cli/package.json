@@ -1,10 +1,10 @@
 {
   "name": "seocore",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Enterprise-grade SEO crawler and auditing CLI.",
   "type": "module",
   "bin": {
-    "seocore": "./dist/index.js"
+    "seocore": "dist/index.js"
   },
   "files": [
     "dist",
@@ -12,18 +12,18 @@
   ],
   "scripts": {
     "build": "node ./scripts/build.mjs",
-    "prepack": "npm run build"
+    "prepack": "node ./scripts/sync-readme.mjs && npm run build"
   },
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/seocore/seocore.git"
+    "url": "git+https://github.com/codepurse/SEOCORE.git"
   },
-  "homepage": "https://github.com/seocore/seocore#readme",
+  "homepage": "https://github.com/codepurse/SEOCORE#readme",
   "bugs": {
-    "url": "https://github.com/seocore/seocore/issues"
+    "url": "https://github.com/codepurse/SEOCORE/issues"
   },
   "license": "MIT",
   "engines": {

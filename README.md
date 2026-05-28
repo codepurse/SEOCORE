@@ -3,7 +3,7 @@
    > Enterprise-grade, multi-threaded SEO Crawler, Rule Engine, and Link Graph Analyzer. Built in TypeScript for speed, compliance, and deep site health audits.
 
    [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-   [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/seocore/seocore)
+   [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/codepurse/SEOCORE)
    [![Node Version](https://img.shields.io/badge/node-%3E%3D20.0.0-blue.svg)](https://nodejs.org)
 
    SEOCore is an enterprise-grade, high-performance SEO auditing and site crawling platform. It combines a concurrent crawler, Cheerio-based scrapers, a declarative Rules Engine, and Graph Theory to analyze link structures, calculate authority scores, track redirects, and score site health across multiple dimensions.
@@ -181,8 +181,8 @@
 
    1. **Clone the repository**:
       ```bash
-      git clone https://github.com/seocore/seocore.git
-      cd seocore
+      git clone https://github.com/codepurse/SEOCORE.git
+      cd SEOCORE
       ```
 
    2. **Install dependencies**:
