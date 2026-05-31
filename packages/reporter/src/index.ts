@@ -1,5 +1,6 @@
 import pc from 'picocolors';
 import { AuditResult, Finding, Severity, Category } from '@seocore/sdk';
+import { calculateSecurityScoreDetails } from '@seocore/scoring-core';
 import * as fs from 'fs';
 import * as path from 'path';
 import { HTML_TEMPLATE } from './template.js';
@@ -613,64 +614,11 @@ export class TerminalReporter {
     printBacklinkBreakdownRow('Link Velocity:', linkVelocityScore, '');
     console.log();
 
-    // Calculate Security sub-score breakdown (Phase 5)
+    // Calculate Security sub-score breakdown using same scorer as category score
     const securityFindings = result.findings.filter(f => f.category === 'security');
-    const securityScale = pagesCount > 1 ? Math.log10(pagesCount + 9) : 1;
+    const securityDetails = calculateSecurityScoreDetails(result.findings, pagesCount, { security: securityScore });
 
-    const getSubScore = (suffixesWithDeduction: Record<string, number>): number => {
-      let rawDeductionSum = 0;
-      const pagesWithFindings = new Map<string, number>();
-      
-      for (const finding of securityFindings) {
-        for (const [suffix, deduction] of Object.entries(suffixesWithDeduction)) {
-          if (finding.id.endsWith(`:${suffix}`) || finding.id.includes(`:${suffix}:`) || finding.ruleId === suffix) {
-            const currentMax = pagesWithFindings.get(finding.url) || 0;
-            pagesWithFindings.set(finding.url, Math.max(currentMax, deduction));
-          }
-        }
-      }
-      
-      for (const maxDeduction of pagesWithFindings.values()) {
-        rawDeductionSum += maxDeduction / pagesCount;
-      }
-      
-      const scaledDeduction = rawDeductionSum / securityScale;
-      return Math.max(0, Math.min(100, Math.round(100 - scaledDeduction)));
-    };
-
-    const httpsScoreBreakdown = getSubScore({ 'not-https': 100 });
-    const hstsScoreBreakdown = getSubScore({
-      'missing-hsts': 100,
-      'hsts-invalid': 60,
-      'hsts-short-max-age': 40,
-      'hsts-missing-subdomains': 30,
-      'hsts-missing-preload': 10
-    });
-    const cspScoreBreakdown = getSubScore({
-      'missing-csp': 100,
-      'csp-report-only': 30,
-      'csp-unsafe-inline-script': 50,
-      'csp-unsafe-eval-script': 40,
-      'csp-script-src-wildcard': 40,
-      'csp-object-src-wildcard': 30,
-      'csp-missing-object-src': 20,
-      'csp-missing-default-src': 20,
-      'csp-missing-frame-ancestors': 10
-    });
-    const xctoScoreBreakdown = getSubScore({
-      'missing-x-content-type-options': 100,
-      'invalid-x-content-type-options': 50
-    });
-    const xframeScoreBreakdown = getSubScore({ 'missing-x-frame-options': 100 });
-    const referrerScoreBreakdown = getSubScore({ 'missing-referrer-policy': 100 });
-    const permissionsScoreBreakdown = getSubScore({ 'missing-permissions-policy': 100 });
-    const coopCoepCorpScoreBreakdown = getSubScore({
-      'missing-coop': 35,
-      'missing-coep': 35,
-      'missing-corp': 30
-    });
-
-    const printSecurityBreakdownRow = (label: string, subScore: number, weightPct: number, suffixes: string[]) => {
+    const printSecurityBreakdownRow = (label: string, subScore: number, weightPct: number, subChecks: string[]) => {
       let subColor = pc.green;
       if (subScore < 50) subColor = pc.red;
       else if (subScore < 90) subColor = pc.yellow;
@@ -678,7 +626,12 @@ export class TerminalReporter {
       console.log(`  • ${`${label} (${weightPct}%):`.padEnd(30)} ${subColor(pc.bold(subScore))} / 100`);
       if (subScore < 100) {
         const ruleFindings = securityFindings.filter(f => 
-          suffixes.some(suffix => f.id.endsWith(`:${suffix}`) || f.id.includes(`:${suffix}:`) || f.ruleId === suffix)
+          subChecks.some(subCheck =>
+            f.subCheck === subCheck
+            || f.ruleId === subCheck
+            || f.id.endsWith(`:${subCheck}`)
+            || f.id.includes(`:${subCheck}:`)
+          )
         );
         const uniqueMessages = Array.from(new Set(ruleFindings.map(f => f.message)));
         for (const msg of uniqueMessages) {
@@ -689,14 +642,12 @@ export class TerminalReporter {
     };
 
     console.log(pc.bold(pc.cyan(`🔒 SECURITY SCORE BREAKDOWN (Grade: ${getSecurityGrade(securityScore)}):`)));
-    printSecurityBreakdownRow('HTTPS Enforced', httpsScoreBreakdown, 20, ['not-https']);
-    printSecurityBreakdownRow('HSTS Header', hstsScoreBreakdown, 20, ['missing-hsts', 'hsts-invalid', 'hsts-short-max-age', 'hsts-missing-subdomains', 'hsts-missing-preload']);
-    printSecurityBreakdownRow('CSP Quality', cspScoreBreakdown, 20, ['missing-csp', 'csp-report-only', 'csp-unsafe-inline-script', 'csp-unsafe-eval-script', 'csp-script-src-wildcard', 'csp-object-src-wildcard', 'csp-missing-object-src', 'csp-missing-default-src', 'csp-missing-frame-ancestors']);
-    printSecurityBreakdownRow('X-Content-Type-Options', xctoScoreBreakdown, 10, ['missing-x-content-type-options', 'invalid-x-content-type-options']);
-    printSecurityBreakdownRow('X-Frame-Options / CSP-FA', xframeScoreBreakdown, 10, ['missing-x-frame-options']);
-    printSecurityBreakdownRow('Referrer-Policy', referrerScoreBreakdown, 10, ['missing-referrer-policy']);
-    printSecurityBreakdownRow('Permissions-Policy', permissionsScoreBreakdown, 5, ['missing-permissions-policy']);
-    printSecurityBreakdownRow('COOP / COEP / CORP', coopCoepCorpScoreBreakdown, 5, ['missing-coop', 'missing-coep', 'missing-corp']);
+    for (const bucket of securityDetails.buckets) {
+      printSecurityBreakdownRow(bucket.label, bucket.score, bucket.weightPct, bucket.subChecks);
+    }
+    if (securityDetails.appliedCap !== null && securityDetails.gateReason) {
+      console.log(`  ${pc.yellow('!')} ${pc.yellow(`Score cap applied at ${securityDetails.appliedCap}/100: ${securityDetails.gateReason}`)}`);
+    }
     console.log();
 
     const filledBlocks = Math.round(score / 5);

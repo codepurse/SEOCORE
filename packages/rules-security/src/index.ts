@@ -641,4 +641,4 @@ export function getSecurityRules(): Rule[] {
   return [new SecurityRule(), new SecurityHeadersRule()];
 }
 
-export { SECURITY_SUBCHECKS } from './sub-checks.js';
+export { SECURITY_SUBCHECKS, type SecuritySubCheck } from './sub-checks.js';

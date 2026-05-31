@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ScoringEngine, calculateMobileScore, calculateSecurityScore } from './index.js';
+import { ScoringEngine, calculateMobileScore, calculateSecurityScore, calculateSecurityScoreDetails } from './index.js';
 import { Finding, SeoConfig, RuleDefinition, TIER_PRESETS } from '@seocore/sdk';
 
 const mockConfig: SeoConfig = {
@@ -226,17 +226,181 @@ describe('ScoringEngine', () => {
       expect(direct.subScores.performance).toBe(100);
     });
 
-    it('security sub-scoring returns expected score and floor limits', () => {
+    it('security sub-scoring caps critical transport failures even when floors are configured', () => {
       const findings: Finding[] = [
         { id: 'security:xyz:not-https', ruleId: 'not-https', severity: 'critical', category: 'security', url: 'http://example.com/', message: '', recommendation: '' }
       ];
-      const scoreWithNoFloor = calculateSecurityScore(findings, 1, {});
-      // httpsScore = 100 - 100 = 0
-      // overall = 0 * 0.20 + 100 * 0.80 = 80
-      expect(scoreWithNoFloor).toBe(80);
+      const detailsWithNoFloor = calculateSecurityScoreDetails(findings, 1, {});
+      expect(detailsWithNoFloor.calculatedScore).toBe(80);
+      expect(detailsWithNoFloor.appliedCap).toBe(40);
+      expect(detailsWithNoFloor.score).toBe(40);
 
       const scoreWithFloor = calculateSecurityScore(findings, 1, { security: 90 });
-      expect(scoreWithFloor).toBe(90);
+      expect(scoreWithFloor).toBe(40);
+    });
+
+    it('security sub-scoring matches hashed subchecks and counts non-header findings', () => {
+      const findings: Finding[] = [
+        {
+          id: 'security-headers:a1b2c3:d4e5f6',
+          ruleId: 'security-headers',
+          subCheck: 'missing-hsts',
+          severity: 'error',
+          category: 'security',
+          url: 'https://example.com/',
+          message: 'HSTS missing.',
+          recommendation: 'Add HSTS.',
+        },
+        {
+          id: 'security-headers:a1b2c3:g7h8i9',
+          ruleId: 'security-headers',
+          subCheck: 'cookie-missing-httponly',
+          severity: 'warning',
+          category: 'security',
+          url: 'https://example.com/',
+          message: 'Cookie missing HttpOnly.',
+          recommendation: 'Add HttpOnly.',
+        }
+      ];
+
+      const details = calculateSecurityScoreDetails(findings, 1, {});
+      const hstsBucket = details.buckets.find(bucket => bucket.key === 'hsts');
+      const cookieBucket = details.buckets.find(bucket => bucket.key === 'cookie-security');
+
+      expect(hstsBucket?.score).toBeLessThan(100);
+      expect(cookieBucket?.score).toBeLessThan(100);
+      expect(details.score).toBeLessThan(100);
+    });
+
+    it('security sub-scoring drops when issues repeat across audited pages', () => {
+      const findings: Finding[] = Array.from({ length: 5 }, (_, index) => {
+        const url = `https://example.com/page-${index + 1}`;
+        return [
+          {
+            id: `security-headers:${index}:missing-hsts`,
+            ruleId: 'security-headers',
+            subCheck: 'missing-hsts',
+            severity: 'error' as const,
+            category: 'security' as const,
+            url,
+            message: 'HSTS missing.',
+            recommendation: 'Add HSTS.',
+          },
+          {
+            id: `security-headers:${index}:missing-csp`,
+            ruleId: 'security-headers',
+            subCheck: 'missing-csp',
+            severity: 'error' as const,
+            category: 'security' as const,
+            url,
+            message: 'CSP missing.',
+            recommendation: 'Add CSP.',
+          },
+          {
+            id: `security-headers:${index}:cookie-missing-secure`,
+            ruleId: 'security-headers',
+            subCheck: 'cookie-missing-secure',
+            severity: 'warning' as const,
+            category: 'security' as const,
+            url,
+            message: 'Cookie missing Secure.',
+            recommendation: 'Add Secure.',
+          }
+        ];
+      }).flat();
+
+      const score = calculateSecurityScore(findings, 5, {});
+      expect(score).toBeLessThan(70);
+    });
+
+    it('security sub-scoring no longer dilutes localized issues across clean pages', () => {
+      // Same single missing-csp issue, audited against a small vs. large site.
+      const makeFinding = (page: number): Finding => ({
+        id: `security-headers:${page}:missing-csp`,
+        ruleId: 'security-headers',
+        subCheck: 'missing-csp',
+        severity: 'error',
+        category: 'security',
+        url: `https://example.com/page-${page}`,
+        message: 'CSP missing.',
+        recommendation: 'Add CSP.',
+      });
+
+      const onePageDetails = calculateSecurityScoreDetails([makeFinding(1)], 1, {});
+      const largeSiteDetails = calculateSecurityScoreDetails([makeFinding(1)], 200, {});
+
+      const onePageCsp = onePageDetails.buckets.find(b => b.key === 'csp');
+      const largeSiteCsp = largeSiteDetails.buckets.find(b => b.key === 'csp');
+
+      // Both register a real, non-trivial penalty (old model diluted the 200-page case to ~0).
+      expect(onePageCsp?.score).toBeLessThan(40);
+      expect(largeSiteCsp?.score).toBeLessThanOrEqual(75);
+      expect(largeSiteCsp?.score).toBeLessThan(100);
+      expect(largeSiteCsp?.affectedPages).toBe(1);
+      // Widespread is still strictly worse than isolated.
+      expect(onePageCsp!.score).toBeLessThan(largeSiteCsp!.score);
+    });
+
+    it('security sub-scoring caps missing CSP or HSTS below an A grade', () => {
+      const findings: Finding[] = [
+        {
+          id: 'security-headers:1:missing-csp',
+          ruleId: 'security-headers',
+          subCheck: 'missing-csp',
+          severity: 'error',
+          category: 'security',
+          url: 'https://example.com/page-1',
+          message: 'CSP missing.',
+          recommendation: 'Add CSP.',
+        }
+      ];
+
+      const details = calculateSecurityScoreDetails(findings, 200, {});
+      expect(details.calculatedScore).toBeGreaterThan(79);
+      expect(details.appliedCap).toBe(79);
+      expect(details.score).toBe(79);
+      expect(details.gateReason).toContain('CSP');
+    });
+
+    it('security sub-scoring caps remaining security errors below 90', () => {
+      const findings: Finding[] = [
+        {
+          id: 'security-headers:1:csp-unsafe-eval-script',
+          ruleId: 'security-headers',
+          subCheck: 'csp-unsafe-eval-script',
+          severity: 'error',
+          category: 'security',
+          url: 'https://example.com/page-1',
+          message: 'CSP allows unsafe-eval.',
+          recommendation: 'Remove unsafe-eval.',
+        }
+      ];
+
+      const details = calculateSecurityScoreDetails(findings, 200, {});
+      expect(details.calculatedScore).toBeGreaterThan(89);
+      expect(details.appliedCap).toBe(89);
+      expect(details.score).toBe(89);
+      expect(details.gateReason).toContain('errors');
+    });
+
+    it('security sub-scoring reaches full per-page deduction when issue is site-wide', () => {
+      const findings: Finding[] = Array.from({ length: 50 }, (_, index) => ({
+        id: `security-headers:${index}:missing-csp`,
+        ruleId: 'security-headers',
+        subCheck: 'missing-csp' as const,
+        severity: 'error' as const,
+        category: 'security' as const,
+        url: `https://example.com/page-${index + 1}`,
+        message: 'CSP missing.',
+        recommendation: 'Add CSP.',
+      }));
+
+      const details = calculateSecurityScoreDetails(findings, 50, {});
+      const csp = details.buckets.find(b => b.key === 'csp');
+      // missing-csp deduction 70 * error factor 1.0, coverage 1.0 -> score 30.
+      expect(csp?.coverage).toBe(1);
+      expect(csp?.score).toBe(30);
+      expect(details.appliedCap).toBeNull();
     });
 
     it('total weighted score matches standard tier weighting', () => {
