@@ -400,7 +400,8 @@ describe('ScoringEngine', () => {
       // missing-csp deduction 70 * error factor 1.0, coverage 1.0 -> score 30.
       expect(csp?.coverage).toBe(1);
       expect(csp?.score).toBe(30);
-      expect(details.appliedCap).toBeNull();
+      expect(details.appliedCap).toBe(79);
+      expect(details.score).toBe(79);
     });
 
     it('total weighted score matches standard tier weighting', () => {

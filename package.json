@@ -12,6 +12,7 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "test": "vitest run",
+    "typecheck": "tsc --noEmit",
     "cli": "tsx packages/cli/src/index.ts"
   },
   "devDependencies": {

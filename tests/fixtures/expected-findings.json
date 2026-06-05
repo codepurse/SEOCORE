@@ -630,28 +630,6 @@
       "documentationLink": "https://seocore.dev/docs/rules/content-quality"
     },
     {
-      "ruleId": "duplicate-content-similarity",
-      "url": "https://fixture.seocore.local/",
-      "subCheck": "near-duplicates",
-      "severity": "error",
-      "category": "seo",
-      "message": "Found 1 page(s) with high content similarity.",
-      "recommendation": "Add canonical tags or merge/rewrite near-identical content.",
-      "evidence": "https://fixture.seocore.local/duplicate (100%)",
-      "documentationLink": "https://seocore.dev/docs/rules/duplicate-content-similarity"
-    },
-    {
-      "ruleId": "duplicate-content-similarity",
-      "url": "https://fixture.seocore.local/duplicate",
-      "subCheck": "near-duplicates",
-      "severity": "error",
-      "category": "seo",
-      "message": "Found 1 page(s) with high content similarity.",
-      "recommendation": "Add canonical tags or merge/rewrite near-identical content.",
-      "evidence": "https://fixture.seocore.local/ (100%)",
-      "documentationLink": "https://seocore.dev/docs/rules/duplicate-content-similarity"
-    },
-    {
       "ruleId": "duplicate-title",
       "url": "https://fixture.seocore.local/",
       "subCheck": "duplicate",
