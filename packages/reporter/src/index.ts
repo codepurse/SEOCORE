@@ -62,6 +62,30 @@ function getScoreColor(score: number): any {
   return pc.red;
 }
 
+export interface AggregatedFinding {
+  finding: Finding;
+  pages: string[];
+}
+
+/**
+ * Collapses identical findings (same rule + sub-check + message) that recur across many
+ * crawled pages into a single entry annotated with every affected page. Lets a site-wide
+ * issue show as "affects 47 pages" instead of being printed 47 times.
+ */
+export function aggregateFindingsByIssue(findings: Finding[]): AggregatedFinding[] {
+  const groups = new Map<string, { finding: Finding; pages: Set<string> }>();
+  for (const f of findings) {
+    const key = `${f.ruleId}|${f.subCheck ?? ''}|${f.message}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.pages.add(f.url);
+    } else {
+      groups.set(key, { finding: f, pages: new Set([f.url]) });
+    }
+  }
+  return [...groups.values()].map(g => ({ finding: g.finding, pages: [...g.pages] }));
+}
+
 export class TerminalReporter {
   static report(result: AuditResult, options: { verbose?: boolean; minSeverity?: Severity } = {}, aiVisBreakdown?: any): void {
     const { verbose = false, minSeverity = 'warning' } = options;
@@ -132,17 +156,27 @@ export class TerminalReporter {
       if (findings.length === 0) continue;
       printedAny = true;
 
-      console.log(`\n${catColors[catName as Category](pc.bold(` ${catName.toUpperCase()} ISSUES (${findings.length}) `))}`);
+      // Aggregate identical findings across pages: the same rule+subcheck+message becomes
+      // one row annotated with "affects N pages", instead of repeating once per crawled page.
+      const aggregated = aggregateFindingsByIssue(findings)
+        .sort((a, b) => severityPriority[b.finding.severity] - severityPriority[a.finding.severity]);
 
-      // Sort findings: critical first, then error, warning, info
-      const sorted = [...findings].sort((a, b) => severityPriority[b.severity] - severityPriority[a.severity]);
-      const countToShow = verbose ? sorted.length : Math.min(5, sorted.length);
+      const headerCount = aggregated.length === findings.length
+        ? `${findings.length}`
+        : `${aggregated.length} issue${aggregated.length === 1 ? '' : 's'}, ${findings.length} occurrences`;
+      console.log(`\n${catColors[catName as Category](pc.bold(` ${catName.toUpperCase()} ISSUES (${headerCount}) `))}`);
+
+      const countToShow = verbose ? aggregated.length : Math.min(5, aggregated.length);
 
       for (let i = 0; i < countToShow; i++) {
-        const f = sorted[i];
+        const { finding: f, pages } = aggregated[i];
         const sevColor = sevColors[f.severity];
         console.log(`\n  ${pc.bold(pc.white('• ' + f.message))} [${sevColor(f.severity.toUpperCase())}]`);
-        console.log(`    ${pc.gray('URL:')}  ${pc.cyan(f.url)}`);
+        if (pages.length > 1) {
+          console.log(`    ${pc.gray('Affects:')} ${pc.yellow(`${pages.length} pages`)} ${pc.gray(`(e.g. ${pages[0]})`)}`);
+        } else {
+          console.log(`    ${pc.gray('URL:')}  ${pc.cyan(f.url)}`);
+        }
         console.log(`    ${pc.gray('Fix:')}  ${pc.green(f.recommendation)}`);
         if (f.evidence) {
           console.log(`    ${pc.gray('Info:')} ${pc.gray(f.evidence)}`);
@@ -176,8 +210,8 @@ export class TerminalReporter {
         }
       }
 
-      if (sorted.length > countToShow) {
-        console.log(`  ${pc.italic(pc.yellow(`  ... and ${sorted.length - countToShow} more ${catName} findings. Run with --verbose to view all.`))}`);
+      if (aggregated.length > countToShow) {
+        console.log(`  ${pc.italic(pc.yellow(`  ... and ${aggregated.length - countToShow} more ${catName} issues. Run with --verbose to view all.`))}`);
       }
     }
 
@@ -285,11 +319,13 @@ export class TerminalReporter {
       const formattedCat = catName.charAt(0).toUpperCase() + catName.slice(1);
       const paddedCat = formattedCat.padEnd(21);
       const catScore = cat.score;
+      const isAudited = cat.audited !== false;
       let catColor = pc.green;
-      if (catScore < 50) catColor = pc.red;
+      if (!isAudited) catColor = pc.gray;
+      else if (catScore < 50) catColor = pc.red;
       else if (catScore < 90) catColor = pc.yellow;
 
-      const paddedScore = String(catScore).padStart(4) + '   ';
+      const paddedScore = isAudited ? String(catScore).padStart(4) + '   ' : ' n/a   ';
       const critCount = cat.findingsCount.critical;
       const errCount = cat.findingsCount.error;
       const warnCount = cat.findingsCount.warning;
@@ -366,15 +402,30 @@ export class TerminalReporter {
       return 'F';
     };
 
+    // Categories with no active rules in this tier weren't measured — show "n/a" rather
+    // than a misleading 100, and exclude them from the (already renormalized) overall score.
+    const fmtScore = (catKey: Category, color: (s: string) => string): string => {
+      const cat = result.categories[catKey];
+      if (cat && cat.audited === false) {
+        return `[ ${pc.gray('n/a')} ]   ${pc.gray('not audited (enable via --tier deep)')}`;
+      }
+      const s = cat?.score ?? 100;
+      return `[ ${color(String(s).padStart(3))} / 100 ]`;
+    };
+
     console.log(pc.bold('PRIMARY AUDIT SCORES:'));
     console.log(`  Overall SEO Score:   [ ${scoreColor(String(score).padStart(3))} / 100 ]`);
-    console.log(`  Mobile SEO Score:    [ ${mobileColor(String(mobileScore).padStart(3))} / 100 ]`);
-    console.log(`  Performance Score:   [ ${perfColor(String(perfScore).padStart(3))} / 100 ]`);
-    console.log(`  Indexing Score:      [ ${idxColor(String(indexingScore).padStart(3))} / 100 ]`);
-    console.log(`  Accessibility Score: [ ${accColor(String(accessScore).padStart(3))} / 100 ]`);
-    console.log(`  AI Visibility Score: [ ${aiColor(String(aiScore).padStart(3))} / 100 ]`);
-    console.log(`  Backlink Score:      [ ${backlinkColor(String(backlinkScore).padStart(3))} / 100 ]`);
-    console.log(`  Security Score:      [ ${securityColor(String(securityScore).padStart(3))} / 100 ] - Grade [ ${securityColor(getSecurityGrade(securityScore))} ]\n`);
+    console.log(`  Mobile SEO Score:    ${fmtScore('mobile_seo', mobileColor)}`);
+    console.log(`  Performance Score:   ${fmtScore('performance', perfColor)}`);
+    console.log(`  Indexing Score:      ${fmtScore('indexing', idxColor)}`);
+    console.log(`  Accessibility Score: ${fmtScore('accessibility', accColor)}`);
+    console.log(`  AI Visibility Score: ${fmtScore('ai_visibility', aiColor)}`);
+    console.log(`  Backlink Score:      ${fmtScore('backlink_intelligence', backlinkColor)}`);
+    const securityAudited = result.categories.security?.audited !== false;
+    const securityLine = securityAudited
+      ? `[ ${securityColor(String(securityScore).padStart(3))} / 100 ] - Grade [ ${securityColor(getSecurityGrade(securityScore))} ]`
+      : `[ ${pc.gray('n/a')} ]   ${pc.gray('not audited')}`;
+    console.log(`  Security Score:      ${securityLine}\n`);
 
     // Calculate AI sub-score breakdown
     const pagesCount = result.pagesAudited || 1;

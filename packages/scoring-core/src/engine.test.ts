@@ -416,4 +416,85 @@ describe('ScoringEngine', () => {
       expect(result.score).toBe(100);
     });
   });
+
+  describe('Score renormalization (un-audited categories)', () => {
+    it('excludes categories with no rules so they do not inflate the overall score', () => {
+      const findings: Finding[] = [
+        {
+          id: 'missing-title:xyz',
+          ruleId: 'missing-title',
+          severity: 'critical',
+          category: 'metadata',
+          url: 'https://example.com/',
+          message: 'Missing title.',
+          recommendation: 'Add title.',
+        },
+      ];
+
+      const result = ScoringEngine.calculate({
+        findings,
+        pagesAudited: 1,
+        config: mockConfig,
+        tierConfig: TIER_PRESETS.standard,
+        ruleDefinitions: mockRuleDefinitions, // metadata-only rules
+      });
+
+      // Only metadata was audited, so the overall score equals the metadata score —
+      // not diluted upward by free 100s from ai_visibility / backlinks / mobile / etc.
+      expect(result.categories.metadata.audited).toBe(true);
+      expect(result.categories.ai_visibility.audited).toBe(false);
+      expect(result.categories.backlink_intelligence.audited).toBe(false);
+      expect(result.score).toBe(result.categories.metadata.score);
+      expect(result.score).toBe(85);
+    });
+  });
+
+  describe('Performance verifiability cap', () => {
+    const perfRuleDefs: RuleDefinition[] = [
+      { id: 'perf', name: 'Performance', description: '', category: 'performance', defaultSeverity: 'warning', defaultWeight: 8 },
+    ];
+
+    it('caps an unverified (non-Lighthouse) performance score at 50', () => {
+      const findings: Finding[] = []; // engine pushes the cap notice into this array
+      const result = ScoringEngine.calculate({
+        findings,
+        pagesAudited: 1,
+        config: mockConfig, // lighthouseEnabled undefined -> estimated metrics
+        tierConfig: TIER_PRESETS.standard,
+        ruleDefinitions: perfRuleDefs,
+      });
+
+      expect(result.categories.performance.score).toBe(50);
+      expect(findings.some(f => f.id === 'performance:performance-capped')).toBe(true);
+    });
+
+    it('does not cap when Lighthouse provides real lab metrics', () => {
+      const findings: Finding[] = [];
+      const result = ScoringEngine.calculate({
+        findings,
+        pagesAudited: 1,
+        config: { ...mockConfig, lighthouseEnabled: true },
+        tierConfig: TIER_PRESETS.standard,
+        ruleDefinitions: perfRuleDefs,
+      });
+
+      expect(result.categories.performance.score).toBe(100);
+      expect(findings.some(f => f.id === 'performance:performance-capped')).toBe(false);
+    });
+
+    it('does not cap when real field data (CrUX) verifies performance', () => {
+      const findings: Finding[] = [];
+      const result = ScoringEngine.calculate({
+        findings,
+        pagesAudited: 1,
+        config: mockConfig, // no Lighthouse
+        tierConfig: TIER_PRESETS.standard,
+        ruleDefinitions: perfRuleDefs,
+        performanceVerified: true, // engine sets this when CrUX field data was applied
+      });
+
+      expect(result.categories.performance.score).toBe(100);
+      expect(findings.some(f => f.id === 'performance:performance-capped')).toBe(false);
+    });
+  });
 });

@@ -49,19 +49,15 @@ describe('Config schema and resolver', () => {
     expect(config.maxPages).toBe(12);
   });
 
-  it('parses keyword intelligence provider settings', () => {
+  it('parses keyword intelligence locale/region settings', () => {
     const config = resolveConfig({
       keywordIntelligence: {
-        provider: 'mock',
         locale: 'en',
         region: 'us',
-        rateLimitMs: 150,
-        batchSize: 10,
       },
     }, 'nonexistent.json');
 
-    expect(config.keywordIntelligence?.provider).toBe('mock');
     expect(config.keywordIntelligence?.locale).toBe('en');
-    expect(config.keywordIntelligence?.batchSize).toBe(10);
+    expect(config.keywordIntelligence?.region).toBe('us');
   });
 });

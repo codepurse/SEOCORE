@@ -175,3 +175,81 @@ describe('HttpCrawler Redirects', () => {
     }
   });
 });
+
+describe('HttpCrawler resource measurement', () => {
+  const mockConfig = {
+    preset: 'standard',
+    concurrency: 2,
+    maxDepth: 3,
+    maxPages: 100,
+    rateLimitMs: 0,
+    retryCount: 0,
+    playwrightEnabled: false,
+    excludePatterns: [],
+    includePatterns: [],
+    ruleOverrides: {},
+  } as unknown as SeoConfig;
+
+  it('measures real same-origin asset bytes and estimates cross-origin', async () => {
+    const originalFetch = global.fetch;
+    const html = `<html><head>
+      <link rel="stylesheet" href="/styles.css">
+      <script src="/app.js"></script>
+      <script src="https://cdn.other.net/lib.js"></script>
+    </head><body>hi</body></html>`;
+
+    global.fetch = vi.fn().mockImplementation(async (url: string, opts: any) => {
+      if (opts?.method === 'HEAD') {
+        const len = url.endsWith('/app.js') ? '12345' : url.endsWith('/styles.css') ? '6789' : '';
+        return {
+          status: 200,
+          ok: true,
+          headers: new Map(len ? [['content-length', len]] : []),
+        } as unknown as Response;
+      }
+      return {
+        status: 200,
+        ok: true,
+        headers: new Map([['content-type', 'text/html']]),
+        text: async () => html,
+      } as unknown as Response;
+    });
+
+    try {
+      const crawler = new HttpCrawler();
+      const result = await crawler.crawl('https://example.com/', mockConfig);
+
+      expect(result.resources?.measured).toBe(true);
+      expect(result.resources?.jsRequests).toBe(2);
+      expect(result.resources?.cssRequests).toBe(1);
+      // same-origin app.js measured (12345) + cross-origin lib.js estimated (35000)
+      expect(result.resources?.jsSizeBytes).toBe(12345 + 35000);
+      expect(result.resources?.cssSizeBytes).toBe(6789);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it('skips measurement when measureResources is disabled', async () => {
+    const originalFetch = global.fetch;
+    let headCount = 0;
+    global.fetch = vi.fn().mockImplementation(async (_url: string, opts: any) => {
+      if (opts?.method === 'HEAD') headCount++;
+      return {
+        status: 200,
+        ok: true,
+        headers: new Map([['content-type', 'text/html']]),
+        text: async () => '<html><script src="/app.js"></script></html>',
+      } as unknown as Response;
+    });
+
+    try {
+      const crawler = new HttpCrawler();
+      const result = await crawler.crawl('https://example.com/', { ...mockConfig, measureResources: false });
+      expect(headCount).toBe(0);
+      expect(result.resources).toBeUndefined();
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+});

@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import pc from 'picocolors';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { command as auditCommand } from './commands/audit.js';
 import { command as compareCommand } from './commands/compare.js';
@@ -35,7 +38,7 @@ const program = buildHelp(new Command(), [
     lines: [
       'audit | crawl | compare | images | technology | js-impact | directories',
       'inspect robots|sitemap|llms-txt|schema|hreflang|backlinks|rank|screenshot|keywords',
-      'analyze ai-visibility|content|schema-graph|link-plan|opportunities',
+      'analyze ai-visibility|content|schema-graph|link-plan|opportunities|security',
       'config init|show|validate',
       'rules list|describe|explain',
       'tier list|describe|explain',
@@ -51,10 +54,21 @@ const program = buildHelp(new Command(), [
   },
 ]);
 
+function resolveVersion(): string {
+  // Resolves in dev (src/../package.json via tsx) and when bundled (dist/../package.json).
+  try {
+    const dir = path.dirname(fileURLToPath(import.meta.url));
+    const pkg = JSON.parse(readFileSync(path.join(dir, '..', 'package.json'), 'utf8'));
+    return typeof pkg.version === 'string' ? pkg.version : '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+
 program
   .name('seocore')
   .description('Enterprise-grade SEO Analysis Platform')
-  .version('1.0.0');
+  .version(resolveVersion());
 
 program.addCommand(auditCommand());
 program.addCommand(crawlCommand());

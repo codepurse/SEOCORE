@@ -1,5 +1,4 @@
 import type { KeywordIntelligenceConfig } from '@seocore/sdk';
-import type { KeywordProviderMetrics, KeywordProviderStatus } from './providers/types.js';
 
 export type SearchIntent =
   | 'informational'
@@ -39,7 +38,6 @@ export interface ScoredKeyword {
   sourceType: KeywordSourceType;
   noiseScore: number;
   noiseAssessment: KeywordNoiseAssessment;
-  providerMetrics?: KeywordProviderMetrics;
   clusterKey?: string;
   clusterLabel?: string;
 }
@@ -75,7 +73,6 @@ export interface KeywordIntelligence {
     totalHardFiltered: number;
     totalSoftDownRanked: number;
     intentsDistribution: Record<SearchIntent, number>;
-    providerStatus: KeywordProviderStatus;
   };
   clusters: TopicCluster[];
   allScoredKeywords: ScoredKeyword[];
@@ -89,6 +86,4 @@ export interface KeywordResearchOptions {
   includeBrands?: boolean;
   strictNoiseFilter?: boolean;
   providerConfig?: KeywordIntelligenceConfig;
-  cacheDir?: string;
-  retryCount?: number;
 }

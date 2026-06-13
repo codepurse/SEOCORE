@@ -4,12 +4,13 @@ import { command as contentCommand } from './content.js';
 import { command as schemaGraphCommand } from './schema-graph.js';
 import { command as linkPlanCommand } from './link-plan.js';
 import { command as opportunitiesCommand } from './opportunities.js';
+import { command as securityCommand } from './security.js';
 import { buildHelp } from '../../shared/help.js';
 
 export function group(): Command {
   const analyzeGroup = buildHelp(
     new Command('analyze')
-      .description('Analyzer-driven deep dives (content, AI visibility, schema graph, link plan, opportunities)'),
+      .description('Analyzer-driven deep dives (content, AI visibility, schema graph, link plan, opportunities, security)'),
     [
       {
         title: 'Subcommands',
@@ -19,6 +20,7 @@ export function group(): Command {
           'schema-graph    Map structured data entities and references',
           'link-plan       Generate internal linking recommendations',
           'opportunities   Rank high-impact SEO opportunities',
+          'security        Audit security headers, transport, CSP, and cookies',
         ],
       },
       {
@@ -29,6 +31,7 @@ export function group(): Command {
           'seocore analyze schema-graph https://example.com --format mermaid',
           'seocore analyze link-plan https://example.com --top 20 --min-confidence 60',
           'seocore analyze opportunities https://example.com --with-gsc --gsc-file ./gsc-pages.json --verbose',
+          'seocore analyze security https://example.com --verbose',
         ],
       },
     ]
@@ -39,6 +42,7 @@ export function group(): Command {
   analyzeGroup.addCommand(schemaGraphCommand());
   analyzeGroup.addCommand(linkPlanCommand());
   analyzeGroup.addCommand(opportunitiesCommand());
+  analyzeGroup.addCommand(securityCommand());
 
   return analyzeGroup;
 }

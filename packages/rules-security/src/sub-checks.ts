@@ -30,6 +30,8 @@ export const SECURITY_SUBCHECKS = {
   COOKIE_MISSING_SECURE: 'cookie-missing-secure',
   COOKIE_MISSING_HTTP_ONLY: 'cookie-missing-httponly',
   COOKIE_MISSING_SAME_SITE: 'cookie-missing-samesite',
+  NO_HTTPS_REDIRECT: 'no-https-redirect',
+  MISSING_SECURITY_TXT: 'missing-security-txt',
 } as const;
 
 export type SecuritySubCheck = typeof SECURITY_SUBCHECKS[keyof typeof SECURITY_SUBCHECKS];

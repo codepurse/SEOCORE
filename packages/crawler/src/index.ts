@@ -3,6 +3,63 @@ import { FilesystemCrawlCache, CrawlCacheEntry } from './cache/index.js';
 import { BrowserPool } from './browser-pool.js';
 
 // ==========================================
+// RESOURCE WEIGHT MEASUREMENT (HTTP MODE)
+// ==========================================
+
+/** Per-asset byte estimates used as a fallback when a real Content-Length is unavailable. */
+const ASSET_ESTIMATE_BYTES = { js: 35000, css: 15000, img: 60000 };
+const MAX_MEASURED_ASSETS_PER_TYPE = 40;
+const ASSET_HEAD_TIMEOUT_MS = 8000;
+const ASSET_HEAD_CONCURRENCY = 6;
+
+interface ExtractedAssets {
+  js: string[];
+  css: string[];
+  img: string[];
+}
+
+/** Lightweight, dependency-free extraction of asset URLs for byte-weight measurement. */
+export function extractAssetUrls(html: string, baseUrl: string): ExtractedAssets {
+  const resolve = (raw: string): string | null => {
+    try {
+      const u = new URL(raw, baseUrl);
+      return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const js = new Set<string>();
+  const css = new Set<string>();
+  const img = new Set<string>();
+
+  const scriptRe = /<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi;
+  const imgRe = /<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi;
+  const linkRe = /<link\b[^>]*>/gi;
+  const hrefRe = /\bhref\s*=\s*["']([^"']+)["']/i;
+  const relRe = /\brel\s*=\s*["']([^"']+)["']/i;
+
+  let m: RegExpExecArray | null;
+  while ((m = scriptRe.exec(html)) !== null) {
+    const r = resolve(m[1]);
+    if (r) js.add(r);
+  }
+  while ((m = imgRe.exec(html)) !== null) {
+    const r = resolve(m[1]);
+    if (r) img.add(r);
+  }
+  while ((m = linkRe.exec(html)) !== null) {
+    const rel = relRe.exec(m[0])?.[1]?.toLowerCase() ?? '';
+    if (!rel.includes('stylesheet')) continue;
+    const href = hrefRe.exec(m[0])?.[1];
+    const r = href ? resolve(href) : null;
+    if (r) css.add(r);
+  }
+
+  return { js: [...js], css: [...css], img: [...img] };
+}
+
+// ==========================================
 // LIGHTHOUSE CRAWLER (PERFORMANCE AUDIT)
 // ==========================================
 
@@ -314,11 +371,91 @@ export class LlmsTxtParser {
 
 export class HttpCrawler implements Crawler {
   private cache?: FilesystemCrawlCache;
+  /** Shared across pages so common bundles (shared JS/CSS) are measured only once. */
+  private readonly assetSizeCache = new Map<string, number | null>();
 
   constructor(cacheDir?: string) {
     if (cacheDir) {
       this.cache = new FilesystemCrawlCache(cacheDir);
     }
+  }
+
+  /** HEAD-probe a single asset for its real byte size; null when unavailable. Cached. */
+  private async headSize(url: string): Promise<number | null> {
+    const cached = this.assetSizeCache.get(url);
+    if (cached !== undefined) return cached;
+
+    let size: number | null = null;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), ASSET_HEAD_TIMEOUT_MS);
+      const res = await fetch(url, {
+        method: 'HEAD',
+        signal: controller.signal,
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SeoCoreEngine/1.0.0; +https://github.com/seocore)' },
+      });
+      clearTimeout(timeoutId);
+      const len = res.headers.get('content-length');
+      if (len) {
+        const n = Number.parseInt(len, 10);
+        if (Number.isFinite(n) && n >= 0) size = n;
+      }
+    } catch {
+      size = null;
+    }
+    this.assetSizeCache.set(url, size);
+    return size;
+  }
+
+  /**
+   * Measures real byte weights for same-origin assets via bounded, cached HEAD probes.
+   * Cross-origin assets and probes without a Content-Length fall back to a per-type
+   * estimate, so totals stay reasonable while same-origin weights are real.
+   */
+  private async measureResources(html: string, baseUrl: string): Promise<NonNullable<CrawlResult['resources']>> {
+    const origin = new URL(baseUrl).origin;
+    const { js, css, img } = extractAssetUrls(html, baseUrl);
+
+    const measureType = async (urls: string[], estimate: number): Promise<number> => {
+      let total = 0;
+      const sameOrigin: string[] = [];
+      for (const u of urls) {
+        try {
+          if (new URL(u).origin === origin) sameOrigin.push(u);
+          else total += estimate; // cross-origin: estimate rather than probe third parties
+        } catch {
+          total += estimate;
+        }
+      }
+      const toMeasure = sameOrigin.slice(0, MAX_MEASURED_ASSETS_PER_TYPE);
+      total += Math.max(0, sameOrigin.length - toMeasure.length) * estimate; // overflow beyond cap: estimate
+
+      for (let i = 0; i < toMeasure.length; i += ASSET_HEAD_CONCURRENCY) {
+        const chunk = toMeasure.slice(i, i + ASSET_HEAD_CONCURRENCY);
+        const sizes = await Promise.all(chunk.map(u => this.headSize(u)));
+        for (const s of sizes) total += s == null ? estimate : s;
+      }
+      return total;
+    };
+
+    const [jsSizeBytes, cssSizeBytes, imageSizeBytes] = await Promise.all([
+      measureType(js, ASSET_ESTIMATE_BYTES.js),
+      measureType(css, ASSET_ESTIMATE_BYTES.css),
+      measureType(img, ASSET_ESTIMATE_BYTES.img),
+    ]);
+
+    return {
+      pageSizeBytes: Buffer.byteLength(html, 'utf8'),
+      jsSizeBytes,
+      cssSizeBytes,
+      imageSizeBytes,
+      otherSizeBytes: 0,
+      jsRequests: js.length,
+      cssRequests: css.length,
+      imageRequests: img.length,
+      totalRequests: 1 + js.length + css.length + img.length,
+      measured: true,
+    };
   }
 
   async crawl(url: string, config: SeoConfig): Promise<CrawlResult> {
@@ -477,6 +614,16 @@ export class HttpCrawler implements Crawler {
           await this.cache.set(currentUrl, entry, Buffer.from(html));
         }
 
+        // Measure real asset byte weights (same-origin, bounded, cached) for the perf score.
+        let resources: CrawlResult['resources'] | undefined;
+        if (config.measureResources !== false && response.status === 200 && /html/i.test(contentType)) {
+          try {
+            resources = await this.measureResources(html, currentUrl);
+          } catch {
+            // Leave undefined so the analyzer falls back to its estimate.
+          }
+        }
+
         return {
           url: currentUrl,
           html,
@@ -485,6 +632,7 @@ export class HttpCrawler implements Crawler {
           contentType,
           headers,
           redirectChain,
+          resources,
         };
       } catch (err: any) {
         if (attempts < maxAttempts) {

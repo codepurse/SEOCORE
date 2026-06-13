@@ -109,6 +109,7 @@ const SECURITY_BUCKETS: readonly SecurityBucketConfig[] = [
       { subCheck: SECURITY_SUBCHECKS.NOT_HTTPS, deduction: 100 },
       { subCheck: SECURITY_SUBCHECKS.MIXED_CONTENT, deduction: 40 },
       { subCheck: SECURITY_SUBCHECKS.INSECURE_FORM, deduction: 35 },
+      { subCheck: SECURITY_SUBCHECKS.NO_HTTPS_REDIRECT, deduction: 30 },
     ],
   },
   {
@@ -185,6 +186,7 @@ const SECURITY_BUCKETS: readonly SecurityBucketConfig[] = [
       { subCheck: SECURITY_SUBCHECKS.MISSING_SRI, deduction: 45 },
       { subCheck: SECURITY_SUBCHECKS.SERVER_VERSION_DISCLOSURE, deduction: 15 },
       { subCheck: SECURITY_SUBCHECKS.X_POWERED_BY_DISCLOSURE, deduction: 15 },
+      { subCheck: SECURITY_SUBCHECKS.MISSING_SECURITY_TXT, deduction: 10 },
     ],
   },
 ] as const;

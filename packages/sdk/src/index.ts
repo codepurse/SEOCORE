@@ -58,6 +58,8 @@ export interface NormalizedPage {
     cls: number; // Cumulative Layout Shift
     inp: number; // Interaction to Next Paint in ms
   };
+  /** Provenance of coreWebVitals: real lab (Lighthouse), real field (CrUX), or estimated. */
+  coreWebVitalsSource?: 'estimated' | 'lab' | 'field';
   resources?: {
     pageSizeBytes: number;
     jsSizeBytes: number;
@@ -68,6 +70,8 @@ export interface NormalizedPage {
     cssRequests: number;
     imageRequests: number;
     totalRequests: number;
+    /** True when byte weights are real measurements; false/undefined when estimated. */
+    measured?: boolean;
   };
   // OpenGraph and Twitter Card
   openGraph?: {
@@ -150,19 +154,12 @@ export interface BacklinkApiConfig {
   logs?: LogBacklinkSourceConfig;
 }
 
-export type KeywordMetricsProviderName = 'mock' | 'dataforseo' | 'google-ads' | 'semrush' | 'ahrefs';
-
 export interface KeywordIntelligenceConfig {
   enabled?: boolean;
-  provider?: KeywordMetricsProviderName;
-  apiKey?: string;
-  login?: string;
-  password?: string;
+  /** Language code for keyword suggestions (e.g. "en"). */
   locale?: string;
+  /** Country/region code for keyword suggestions (e.g. "us"). */
   region?: string;
-  rateLimitMs?: number;
-  batchSize?: number;
-  cacheTtlSeconds?: number;
 }
 
 export interface BacklinkDomainMetrics {
@@ -179,6 +176,14 @@ export interface BacklinkIntelligenceData {
   backlinks: Backlink[];
   domainMetrics: BacklinkDomainMetrics;
   sources: string[];
+}
+
+/** Real-world Core Web Vitals field data for a URL (e.g. a CrUX export row). */
+export interface CruxFieldMetric {
+  url: string;
+  lcp?: number; // ms
+  cls?: number;
+  inp?: number; // ms
 }
 
 export interface SeoConfig {
@@ -208,6 +213,10 @@ export interface SeoConfig {
   cacheDir?: string;
   /** Phase 6: disable adaptive concurrency */
   adaptiveConcurrency?: boolean;
+  /** Measure real asset byte weights via same-origin HEAD probes (default: true). */
+  measureResources?: boolean;
+  /** Real Core Web Vitals field data (e.g. from CrUX) keyed by URL, used to verify performance. */
+  fieldData?: CruxFieldMetric[];
   /** Phase 8: JavaScript impact analysis configuration */
   jsImpact?: import('./js-impact.js').JsImpactConfig;
   /** Phase 9: keyword intelligence provider configuration */
@@ -223,6 +232,12 @@ export interface CategoryScore {
   score: number; // 0 to 100
   totalDeductions: number;
   findingsCount: Record<Severity, number>;
+  /**
+   * Whether this category was actually audited (had at least one active rule).
+   * Un-audited categories are excluded from the weighted overall score so they
+   * don't contribute a misleading free 100. Defaults to true when omitted.
+   */
+  audited?: boolean;
 }
 
 export interface CrawlGraphNode {
@@ -353,6 +368,8 @@ export interface CrawlResult {
     cssRequests: number;
     imageRequests: number;
     totalRequests: number;
+    /** True when byte weights are real measurements; false/undefined when estimated. */
+    measured?: boolean;
   };
   lighthouse?: {
     score: number;

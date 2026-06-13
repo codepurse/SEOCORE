@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { clusterKeywords } from './cluster-builder.js';
 import { applyNoiseFilter, normalizeAndDedupSuggestions } from './noise-filter.js';
-import { enrichKeywordsWithProviderMetrics } from './providers/index.js';
 import { scoreKeyword } from './scorer.js';
 import type { KeywordIntelligence, KeywordResearchOptions, KeywordSourceType, SearchIntent } from './types.js';
 
@@ -178,17 +177,6 @@ export async function performKeywordResearch(
     strictNoiseFilter: options.strictNoiseFilter,
   });
 
-  const providerResult = await enrichKeywordsWithProviderMetrics(
-    filteredSuggestions.kept.map(entry => entry.keyword),
-    lang,
-    country,
-    {
-      config: options.providerConfig,
-      cacheDir: options.cacheDir,
-      retryCount: options.retryCount,
-    },
-  );
-
   const scoredKeywords = filteredSuggestions.kept.map(entry =>
     scoreKeyword({
       keyword: entry.keyword,
@@ -196,7 +184,6 @@ export async function performKeywordResearch(
       sourceType: entry.sourceType,
       index: entry.index,
       noiseAssessment: entry.noiseAssessment,
-      providerMetrics: providerResult.metricsByKeyword.get(entry.keyword),
     }),
   );
 
@@ -216,7 +203,6 @@ export async function performKeywordResearch(
       totalHardFiltered: filteredSuggestions.filtered.length,
       totalSoftDownRanked,
       intentsDistribution: buildIntentDistribution(scoredKeywords),
-      providerStatus: providerResult.status,
     },
     clusters,
     allScoredKeywords: scoredKeywords,

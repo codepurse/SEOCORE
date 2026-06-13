@@ -52,6 +52,8 @@ export function command(): Command {
       .option('--budget-cls <number>', 'Cumulative Layout Shift budget', parseFloat)
       .option('--budget-inp <ms>', 'Interaction to Next Paint budget in ms', parseInt)
       .option('--budget-js <bytes>', 'Total JavaScript payload budget', parseInt)
+      .option('--with-crux', 'Use real Core Web Vitals field data (CrUX) to verify performance', false)
+      .option('--crux-file <path>', 'Path to a CrUX JSON export (defaults to ./crux-pages.json)')
       .option('--module <modules>', 'Comma-separated module override')
       .option('--save', 'Save audit result as a reusable snapshot', false)
       .option('--diff', 'Compare current audit against the latest saved snapshot', false)
@@ -168,6 +170,18 @@ export async function handler(url: string, options: any): Promise<void> {
       useLighthouse = answers.enableLighthouse;
     }
     if (useLighthouse !== undefined) partialConfig.lighthouseEnabled = useLighthouse;
+
+    if (options.withCrux || options.cruxFile) {
+      const { loadCruxFile } = await import('@seocore/analyzers');
+      const cruxPath = options.cruxFile || './crux-pages.json';
+      const loaded = loadCruxFile(cruxPath);
+      if (loaded.error) {
+        console.log(pc.yellow(`⚠️  CrUX field data not loaded (${loaded.error}). Performance will stay estimated.`));
+      } else {
+        partialConfig.fieldData = loaded.data;
+        console.log(pc.gray(`Loaded ${loaded.data.length} CrUX field-data row(s) from ${cruxPath}.`));
+      }
+    }
 
     const eventBus = new EventBus();
     attachStandardEvents(eventBus, { verbose: options.verbose });
