@@ -1,5 +1,4 @@
 import { classifyIntent } from './intent-classifier.js';
-import type { KeywordProviderMetrics } from './providers/types.js';
 import type { KeywordNoiseAssessment, KeywordSourceType, ScoredKeyword } from './types.js';
 
 function clamp(value: number, min: number, max: number): number {
@@ -23,22 +22,6 @@ function sourceWeight(sourceType: KeywordSourceType): number {
   }
 }
 
-function normalizeVolume(searchVolume?: number): number {
-  if (!searchVolume || searchVolume <= 0) return 0;
-  return clamp((Math.log10(searchVolume + 1) / 5) * 100, 0, 100);
-}
-
-function providerAdjustment(metrics?: KeywordProviderMetrics): number {
-  if (!metrics) return 0;
-
-  const volumeBoost = normalizeVolume(metrics.searchVolume) * 0.18;
-  const difficultyPenalty = (metrics.keywordDifficulty ?? 0) * 0.08;
-  const cpcBoost = clamp((metrics.cpc ?? 0) * 1.2, 0, 10);
-  const competitionPenalty = clamp((metrics.competition ?? 0) * 8, 0, 8);
-
-  return Math.round(volumeBoost + cpcBoost - difficultyPenalty - competitionPenalty);
-}
-
 function noisePenalty(noise: KeywordNoiseAssessment, intent: ReturnType<typeof classifyIntent>): number {
   if (noise.allowlisted) return 0;
 
@@ -52,7 +35,6 @@ export function scoreKeyword(input: {
   sourceType: KeywordSourceType;
   index: number;
   noiseAssessment: KeywordNoiseAssessment;
-  providerMetrics?: KeywordProviderMetrics;
 }): ScoredKeyword {
   const intent = classifyIntent(input.keyword);
   const kw = input.keyword.toLowerCase().trim();
@@ -91,7 +73,7 @@ export function scoreKeyword(input: {
   );
 
   const score = clamp(
-    heuristicScore - noisePenalty(input.noiseAssessment, intent) + providerAdjustment(input.providerMetrics),
+    heuristicScore - noisePenalty(input.noiseAssessment, intent),
     0,
     100,
   );
@@ -107,6 +89,5 @@ export function scoreKeyword(input: {
     sourceType: input.sourceType,
     noiseScore: input.noiseAssessment.score,
     noiseAssessment: input.noiseAssessment,
-    providerMetrics: input.providerMetrics,
   };
 }

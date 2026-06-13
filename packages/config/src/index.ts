@@ -47,15 +47,8 @@ const BacklinkApiConfigSchema = z.object({
 
 const KeywordIntelligenceConfigSchema = z.object({
   enabled: z.boolean().default(true),
-  provider: z.enum(['mock', 'dataforseo', 'google-ads', 'semrush', 'ahrefs']).optional(),
-  apiKey: z.string().optional(),
-  login: z.string().optional(),
-  password: z.string().optional(),
   locale: z.string().optional(),
   region: z.string().optional(),
-  rateLimitMs: z.number().int().nonnegative().default(0),
-  batchSize: z.number().int().positive().default(25),
-  cacheTtlSeconds: z.number().int().positive().default(86400),
 }).optional();
 
 const SeverityEnum = z.enum(['critical', 'error', 'warning', 'info']);
@@ -100,6 +93,13 @@ export const SeoConfigSchema = z.object({
   cacheMaxAge: z.number().int().nonnegative().default(86400),
   cacheDir: z.string().default('.seocore-cache'),
   adaptiveConcurrency: z.boolean().default(true),
+  measureResources: z.boolean().default(true),
+  fieldData: z.array(z.object({
+    url: z.string(),
+    lcp: z.number().optional(),
+    cls: z.number().optional(),
+    inp: z.number().optional(),
+  })).optional(),
 });
 
 /**
@@ -255,22 +255,6 @@ export function resolveConfig(partial: Partial<SeoConfig> = {}, configFile?: str
     backlinks.logs = backlinks.logs || {};
     backlinks.logs.maxRows = Number.parseInt(process.env.SEO_CORE_BACKLINKS_LOG_MAX_ROWS, 10);
   }
-  if (process.env.SEO_CORE_KEYWORD_PROVIDER) {
-    const keywordIntelligence = ensureKeywordIntelligenceConfig();
-    keywordIntelligence.provider = process.env.SEO_CORE_KEYWORD_PROVIDER as any;
-  }
-  if (process.env.SEO_CORE_KEYWORD_API_KEY) {
-    const keywordIntelligence = ensureKeywordIntelligenceConfig();
-    keywordIntelligence.apiKey = process.env.SEO_CORE_KEYWORD_API_KEY;
-  }
-  if (process.env.SEO_CORE_KEYWORD_LOGIN) {
-    const keywordIntelligence = ensureKeywordIntelligenceConfig();
-    keywordIntelligence.login = process.env.SEO_CORE_KEYWORD_LOGIN;
-  }
-  if (process.env.SEO_CORE_KEYWORD_PASSWORD) {
-    const keywordIntelligence = ensureKeywordIntelligenceConfig();
-    keywordIntelligence.password = process.env.SEO_CORE_KEYWORD_PASSWORD;
-  }
   if (process.env.SEO_CORE_KEYWORD_LOCALE) {
     const keywordIntelligence = ensureKeywordIntelligenceConfig();
     keywordIntelligence.locale = process.env.SEO_CORE_KEYWORD_LOCALE;
@@ -278,18 +262,6 @@ export function resolveConfig(partial: Partial<SeoConfig> = {}, configFile?: str
   if (process.env.SEO_CORE_KEYWORD_REGION) {
     const keywordIntelligence = ensureKeywordIntelligenceConfig();
     keywordIntelligence.region = process.env.SEO_CORE_KEYWORD_REGION;
-  }
-  if (process.env.SEO_CORE_KEYWORD_RATE_LIMIT_MS) {
-    const keywordIntelligence = ensureKeywordIntelligenceConfig();
-    keywordIntelligence.rateLimitMs = Number.parseInt(process.env.SEO_CORE_KEYWORD_RATE_LIMIT_MS, 10);
-  }
-  if (process.env.SEO_CORE_KEYWORD_BATCH_SIZE) {
-    const keywordIntelligence = ensureKeywordIntelligenceConfig();
-    keywordIntelligence.batchSize = Number.parseInt(process.env.SEO_CORE_KEYWORD_BATCH_SIZE, 10);
-  }
-  if (process.env.SEO_CORE_KEYWORD_CACHE_TTL_SECONDS) {
-    const keywordIntelligence = ensureKeywordIntelligenceConfig();
-    keywordIntelligence.cacheTtlSeconds = Number.parseInt(process.env.SEO_CORE_KEYWORD_CACHE_TTL_SECONDS, 10);
   }
 
   // 5. Validate with Zod

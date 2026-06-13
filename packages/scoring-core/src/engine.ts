@@ -11,12 +11,17 @@ const SEVERITY_MULTIPLIERS: Record<Severity, number> = {
   info: 0.05,
 };
 
+/** Max performance category score when Core Web Vitals are estimated, not lab-measured. */
+const PERFORMANCE_UNVERIFIED_CAP = 50;
+
 export interface ScoringInput {
   findings: Finding[];
   pagesAudited: number;
   config: SeoConfig;
   tierConfig: ExecutionTierConfig;
   ruleDefinitions: RuleDefinition[];
+  /** True when performance was measured with real metrics (Lighthouse lab or CrUX field data). */
+  performanceVerified?: boolean;
 }
 
 export interface ScoringResult {
@@ -26,7 +31,7 @@ export interface ScoringResult {
 
 export class ScoringEngine {
   static calculate(input: ScoringInput): ScoringResult {
-    const { findings, pagesAudited, config, tierConfig, ruleDefinitions } = input;
+    const { findings, pagesAudited, config, tierConfig, ruleDefinitions, performanceVerified } = input;
 
     const categories = this.initCategories();
     const categoryDeductions = this.initCategoryDeductions();
@@ -57,10 +62,19 @@ export class ScoringEngine {
     const weights = tierConfig.scoring.categoryWeights ?? DEFAULT_CATEGORY_WEIGHTS;
     const floors = tierConfig.scoring.floorScores ?? DEFAULT_FLOOR_SCORES;
 
+    // A category is "audited" only if at least one active rule targets it. Categories
+    // with no rules (e.g. ai_visibility / backlinks in the standard tier) are excluded
+    // from the weighted overall score so they don't contribute a misleading free 100.
+    const auditedCategories = new Set<Category>();
+    for (const rDef of ruleDefinitions) {
+      auditedCategories.add(rDef.category);
+    }
+
     for (const cat of Object.keys(categories) as Category[]) {
       const rawScore = 100 - categoryDeductions[cat];
       categories[cat].totalDeductions = Math.round(categoryDeductions[cat] * 10) / 10;
       categories[cat].score = Math.max(floors[cat] ?? 0, Math.min(100, Math.round(rawScore)));
+      categories[cat].audited = auditedCategories.has(cat);
     }
 
     if (categories.mobile_seo) {
@@ -94,10 +108,34 @@ export class ScoringEngine {
       categories.security.totalDeductions = Math.round((100 - calculatedSecurityScore) * 10) / 10;
     }
 
+    // Cap unverified performance: without real lab metrics (Lighthouse), Core Web Vitals
+    // are estimated from load time + request counts, so a high performance score cannot be
+    // trusted. Mirror the mobile scorer's discipline and cap at 50 until real data exists.
+    if (categories.performance && auditedCategories.has('performance')) {
+      const verified = config.lighthouseEnabled === true || performanceVerified === true;
+      if (!verified && categories.performance.score > PERFORMANCE_UNVERIFIED_CAP) {
+        categories.performance.score = PERFORMANCE_UNVERIFIED_CAP;
+        categories.performance.totalDeductions = Math.round((100 - PERFORMANCE_UNVERIFIED_CAP) * 10) / 10;
+        if (!findings.some(f => f.id === 'performance:performance-capped')) {
+          findings.push({
+            id: 'performance:performance-capped',
+            ruleId: 'performance',
+            severity: 'info',
+            category: 'performance',
+            url: findings.find(f => f.category === 'performance')?.url ?? findings[0]?.url ?? '',
+            message: `Performance capped at ${PERFORMANCE_UNVERIFIED_CAP} — Core Web Vitals are estimated, not measured.`,
+            recommendation: 'Run with --lighthouse (or the enterprise tier) to unlock verified performance scores.',
+          });
+        }
+      }
+    }
+
     let weightedSum = 0;
     let weightTotal = 0;
 
     for (const cat of Object.keys(categories) as Category[]) {
+      // Only audited categories contribute to the overall score (renormalize over them).
+      if (categories[cat].audited === false) continue;
       const catWeight = weights[cat] ?? DEFAULT_CATEGORY_WEIGHTS[cat];
       weightedSum += categories[cat].score * catWeight;
       weightTotal += catWeight;

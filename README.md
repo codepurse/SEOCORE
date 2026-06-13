@@ -56,8 +56,9 @@
 6. **Crawl Graph & Link Authority Analysis**:
    - Computes in-degree, out-degree, and custom authority scores (PageRank style).
    - Flags orphan pages and structural dead ends.
-7. **AI Visibility & LLM Crawler Directives Auditor**:
-   - Evaluates brand visibility and structured indexing across search engines, chatbots, and AI crawlers.
+7. **AI/LLM Crawler Readiness Auditor**:
+   - Audits on-page AI readiness: content extractability, entity clarity, citation readiness, and retrieval friendliness from the page's own HTML and structured data.
+   - Checks AI/LLM crawler *access directives* (whether GPTBot, ClaudeBot, PerplexityBot, Google-Extended are allowed) — it inspects your site's configuration, it does not query chatbots or measure off-site brand mentions.
    - Strictly validates crawlability configurations (robots.txt, sitemaps).
    - Audits `llms.txt` and `/.well-known/llms.txt` rules for GPTBot, ClaudeBot, PerplexityBot, and Google-Extended.
 8. **Mobile SEO Scorer & Evaluator**:
@@ -74,9 +75,9 @@
    - Verifies AI citation readiness (structured data completeness, llms.txt presence, semantic HTML usage).
    - Provides actionable findings with severity levels.
    - Supports JSON and HTML report exports for documentation and CI/CD integration.
-10. **Outbound Authority Links & Google Rank Checker**:
-   - Analyzes backlink domains metrics (authority counts, referring domains, spam scores).
-   - Verifies keywords visibility inside Google Top 10 Search Results via serpapi or headless browser automation.
+10. **Backlink Intelligence & Google Rank Checker**:
+   - Reports referring domains and inbound links from your own first-party sources: a Google Search Console export, server access logs, or the optional Bing Webmaster API. (Domain-authority and spam-score metrics are only shown if a provider that supplies them is connected — none ship by default.)
+   - Verifies keyword visibility inside Google's Top 10 search results via SerpAPI (optional) or free headless-browser automation.
 11. **Competitive Site Comparer**:
    - Compares health metrics, performance budgets, metadata, and link structures across two different URLs or exported JSON audits.
 12. **Hreflang Validator**:
@@ -238,7 +239,7 @@
    - `js-impact`: Compare raw HTML vs rendered DOM for JavaScript SEO impact
    - `directories`: Check business directory presence and NAP consistency across citation sources
    - `inspect`: Single-aspect probes (robots, sitemap, schema, hreflang, backlinks, rank, screenshot, llms-txt)
-   - `analyze`: Analyzer-driven deep dives (content, ai-visibility, schema-graph, link-plan, opportunities)
+   - `analyze`: Analyzer-driven deep dives (content, ai-visibility, schema-graph, link-plan, opportunities, security)
    - `config`: Manage and validate SEO config
    - `rules`: Manage and inspect SEO validation rules
    - `tier`: Manage execution tiers
@@ -313,6 +314,12 @@
    ```
 
    **Audit Flags:** `--save`, `--diff`, `--ci`, `--dry-run`, `--history-dir <path>` (custom snapshot directory)
+
+   **Verified performance with real field data:** by default, static crawls cannot measure Core Web Vitals, so the performance category is **capped at 50** (clearly labelled as estimated). Supply real-world CrUX field data to unlock a verified, uncapped performance score:
+   ```bash
+  seocore audit https://example.com --with-crux --crux-file ./crux-pages.json
+   ```
+   The CrUX file is a JSON array of `{ "url": "...", "lcp": <ms>, "cls": <number>, "inp": <ms> }` rows. URLs are matched per page; matched pages report real metrics and lift the cap. Categories with no active rules in the chosen tier (e.g. AI visibility / backlinks in `standard`) display `n/a — not audited` and are excluded from the overall score rather than padding it with a free 100.
 
    #### 3. Run Crawler Only
    Map site structure and list HTTP responses without executing SEO rules or scoring:
@@ -501,6 +508,29 @@
    - If `--gsc-file` or `--crux-file` is omitted, the command falls back to `./gsc-pages.json` and `./crux-pages.json`.
    - Output is site-level analysis with page-level prioritized actions, not a full enterprise audit replacement.
 
+   #### 9b. Analyze Security Posture
+   Run a focused, single-page security audit and get a graded report — the same rules and weighted scoring used inside `audit`, surfaced on their own with a letter grade and per-category breakdown:
+   ```bash
+  seocore analyze security https://example.com
+   ```
+
+   Show remediation steps and evidence for every finding:
+   ```bash
+  seocore analyze security https://example.com --verbose
+   ```
+
+   Export a shareable HTML or machine-readable JSON report:
+   ```bash
+  seocore analyze security https://example.com --format html --output ./security-report.html
+  seocore analyze security https://example.com --json --output ./security-report.json
+   ```
+
+   **Covers:** HTTPS/transport, mixed content, HTTP→HTTPS redirect verification, HSTS, full CSP directive analysis, X-Frame-Options, Referrer-Policy, X-Content-Type-Options, Permissions-Policy, COOP/COEP/CORP, cookie flags (Secure/HttpOnly/SameSite), Subresource Integrity, server/`X-Powered-By` disclosure, and `/.well-known/security.txt` (RFC 9116).
+
+   **Grade scale:** `A+` ≥95, `A` ≥90, `B` ≥80, `C` ≥70, `D` ≥60, else `F`. Missing CSP/HSTS caps the score below an A; HTTP or mixed content caps it hard. This is a **passive header/configuration audit** — it does not perform active vulnerability scanning.
+
+   **Flags:** `-f, --format terminal|json|html`, `-o <path>`, `-v, --verbose`, `--json`, `--config <path>`.
+
    #### 10. Inspect Single Aspects
    The `inspect` command has subcommands for individual checks:
 
@@ -529,7 +559,7 @@
     seocore inspect hreflang https://example.com
      ```
 
-   - **backlinks**: Extract backlink profiles and analyze referring domain authority and spam scores
+   - **backlinks**: Report referring domains and inbound links from a first-party source (GSC export, access logs, or optional Bing API). Runs only when a source is configured; otherwise prints setup guidance.
      ```bash
     seocore inspect backlinks https://example.com
      ```

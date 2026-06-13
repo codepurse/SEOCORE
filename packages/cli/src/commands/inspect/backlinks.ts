@@ -23,17 +23,41 @@ export async function handler(url: string, options: any): Promise<void> {
     validateUrl(url);
 
     const config = resolveConfig();
-    
+    const isJson = options.json || options.format === 'json';
+
     if (!config.backlinks?.provider) {
-      console.error(
-        pc.red(
-          'Error: Backlink provider not configured. Set SEO_CORE_BACKLINKS_PROVIDER plus Bing, GSC export, or log-source settings in env vars or config.'
-        )
-      );
-      process.exit(1);
+      if (isJson) {
+        const payload = {
+          targetUrl: url,
+          checkedAt: new Date().toISOString(),
+          status: 'not-configured',
+          message: 'No backlink data source configured.',
+          backlinks: [],
+          totalBacklinks: 0,
+        };
+        if (options.output) {
+          fs.writeFileSync(options.output, JSON.stringify(payload, null, 2), 'utf8');
+          console.log(pc.green(`✓ JSON report saved to ${path.resolve(options.output)}`));
+        } else {
+          console.log(JSON.stringify(payload, null, 2));
+        }
+        return;
+      }
+
+      console.log();
+      console.log(pc.bold(pc.yellow('No backlink data source configured — skipping backlink analysis.')));
+      console.log();
+      console.log('Backlinks need a data source. Two of the three are keyless:');
+      console.log(`  ${pc.cyan('•')} Google Search Console export (CSV)  ${pc.gray('— keyless')}`);
+      console.log(`     ${pc.gray('SEO_CORE_BACKLINKS_GSC_EXPORT_PATH=./gsc-links.csv')}`);
+      console.log(`  ${pc.cyan('•')} Server access logs                  ${pc.gray('— keyless')}`);
+      console.log(`     ${pc.gray('SEO_CORE_BACKLINKS_LOG_PATHS=./access.log')}`);
+      console.log(`  ${pc.cyan('•')} Bing Webmaster Tools API            ${pc.gray('— optional API key')}`);
+      console.log(`     ${pc.gray('SEO_CORE_BACKLINKS_PROVIDER=bing  SEO_CORE_BACKLINKS_API_KEY=...')}`);
+      console.log();
+      return;
     }
 
-    const isJson = options.json || options.format === 'json';
     const spinner = new Spinner(`Analyzing backlinks for ${url}...`);
     if (!isJson) spinner.start();
 

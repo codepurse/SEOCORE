@@ -20,6 +20,24 @@ export { SchemaGraphAnalyzer, type SchemaGraphAnalysisResult, type SchemaEntityN
 export { LinkPlanAnalyzer, type LinkPlanResult, type PlannedTarget, type HubSummary, type LinkSuggestion, type SuggestionOptions } from './link-plan.js';
 export { OpportunitiesAnalyzer, type OpportunitiesResult, type SearchOpportunity, type GscMetrics, type CruxMetrics, type PageSearchData, loadGscFile, loadCruxFile } from './opportunities.js';
 
+/**
+ * Maps Core Web Vitals (lab, field, or estimated) to a 0–100 performance score.
+ * Shared so estimated and real (CrUX field) metrics are scored identically.
+ */
+export function scoreCoreWebVitals(cwv: { lcp: number; cls: number; inp: number }): number {
+  let lcpScore = 100;
+  if (cwv.lcp > 2500) lcpScore = Math.max(0, 100 - ((cwv.lcp - 2500) / 15));
+  if (cwv.lcp > 4000) lcpScore = Math.max(0, 50 - ((cwv.lcp - 4000) / 50));
+
+  let clsScore = 100;
+  if (cwv.cls > 0.1) clsScore = Math.max(0, 100 - ((cwv.cls - 0.1) * 333));
+
+  let inpScore = 100;
+  if (cwv.inp > 200) inpScore = Math.max(0, 100 - ((cwv.inp - 200) / 3));
+
+  return Math.max(0, Math.min(100, Math.round((lcpScore * 0.4) + (clsScore * 0.3) + (inpScore * 0.3))));
+}
+
 export class PageNormalizer {
   static normalize(result: CrawlResult): NormalizedPage {
     const { url, html, statusCode, loadTimeMs, contentType, redirectChain } = result;
@@ -272,6 +290,7 @@ export class PageNormalizer {
       if (result.lighthouse) {
         normalized.coreWebVitals = result.lighthouse.coreWebVitals;
         normalized.performanceScore = Math.round(result.lighthouse.score * 100);
+        normalized.coreWebVitalsSource = 'lab';
       } else {
         // Simulated/Extracted Core Web Vitals
         const lcp = Math.round(loadTimeMs * (1.1 + (resources.jsRequests * 0.1) + (resources.imageRequests * 0.02)));
@@ -279,21 +298,8 @@ export class PageNormalizer {
         const inp = Math.round(80 + (resources.jsRequests * 15) + Math.min(300, resources.jsSizeBytes / 5000));
 
         normalized.coreWebVitals = { lcp, cls, inp };
-
-        // Performance Score (0-100)
-        let lcpScore = 100;
-        if (lcp > 2500) lcpScore = Math.max(0, 100 - ((lcp - 2500) / 15));
-        if (lcp > 4000) lcpScore = Math.max(0, 50 - ((lcp - 4000) / 50));
-
-        let clsScore = 100;
-        if (cls > 0.1) clsScore = Math.max(0, 100 - ((cls - 0.1) * 333));
-
-        let inpScore = 100;
-        if (inp > 200) inpScore = Math.max(0, 100 - ((inp - 200) / 3));
-
-        normalized.performanceScore = Math.max(0, Math.min(100, Math.round(
-          (lcpScore * 0.4) + (clsScore * 0.3) + (inpScore * 0.3)
-        )));
+        normalized.performanceScore = scoreCoreWebVitals({ lcp, cls, inp });
+        normalized.coreWebVitalsSource = 'estimated';
       }
 
     } catch (err: any) {

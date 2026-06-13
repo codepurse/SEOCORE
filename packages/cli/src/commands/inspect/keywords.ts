@@ -45,10 +45,6 @@ function toCSV(data: KeywordIntelligence): string {
     'Noise Score',
     'Business Intent',
     'Topical Importance',
-    'Search Volume',
-    'Keyword Difficulty',
-    'CPC',
-    'Competition',
     'Cluster',
     'Cluster Kind',
     'Source Type',
@@ -64,10 +60,6 @@ function toCSV(data: KeywordIntelligence): string {
         k.noiseScore.toString(),
         k.businessIntentScore.toString(),
         k.topicalImportance.toString(),
-        k.providerMetrics?.searchVolume?.toString() ?? '',
-        k.providerMetrics?.keywordDifficulty?.toString() ?? '',
-        k.providerMetrics?.cpc?.toString() ?? '',
-        k.providerMetrics?.competition?.toString() ?? '',
         cluster.name,
         cluster.kind,
         k.sourceType
@@ -145,15 +137,6 @@ function printKeywordTerminalDisplay(
     pc.gray(`Careers: ${dist['jobs-career']}`)
   ].join(' | ');
   console.log(`• Intent Distribution: ${distStr}`);
-  const providerStatus = result.metrics.providerStatus;
-  const providerSummary =
-    providerStatus.status === 'not-configured'
-      ? pc.gray('heuristic only')
-      : `${pc.green(providerStatus.activeProvider || providerStatus.configuredProvider || 'unknown')} (${providerStatus.enrichedKeywords} enriched, ${providerStatus.cacheHits} cache hits)`;
-  console.log(`• Provider: ${providerSummary}`);
-  if (providerStatus.warnings.length > 0) {
-    console.log(`• Provider Warnings: ${pc.yellow(providerStatus.warnings.join(' | '))}`);
-  }
   console.log();
 
   // Topic Clusters Section
@@ -220,8 +203,6 @@ export async function handler(keyword: string, options: any): Promise<void> {
       includeBrands: options.includeBrands,
       strictNoiseFilter: options.strictNoiseFilter,
       providerConfig: config.keywordIntelligence,
-      cacheDir: config.cacheDir,
-      retryCount: config.retryCount,
     });
 
     if (!quietMode) spinner.stop('Keyword intelligence complete.');

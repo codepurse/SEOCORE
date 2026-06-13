@@ -22,7 +22,7 @@ import PQueue from 'p-queue';
 import Bottleneck from 'bottleneck';
 import { AimdConcurrencyController } from './concurrency/index.js';
 import { HttpCrawler, PlaywrightCrawler, LighthouseCrawler, RobotsTxt, SitemapParser, CrawlerRegistry, createDefaultRegistry } from '@seocore/crawler';
-import { PageNormalizer } from '@seocore/analyzers';
+import { PageNormalizer, scoreCoreWebVitals } from '@seocore/analyzers';
 import { createDefaultRuleEngine, type RuleEngine, PageIndexRegistry } from '@seocore/rules-core';
 import { ScoringEngine, CrawlGraphBuilder } from '@seocore/scoring-core';
 
@@ -44,6 +44,17 @@ export function isUrlMatch(url: string, patterns: string[]): boolean {
     });
   } catch {
     return false;
+  }
+}
+
+/** Normalizes a URL for loose field-data matching (drops trailing slash, lowercases host). */
+function normalizeUrlForMatch(url: string): string {
+  try {
+    const u = new URL(url);
+    const path = u.pathname.replace(/\/$/, '');
+    return `${u.protocol}//${u.host.toLowerCase()}${path}${u.search}`;
+  } catch {
+    return url.replace(/\/$/, '');
   }
 }
 
@@ -188,6 +199,13 @@ export class SeoEngine {
     const queued = new Set<string>();
     const pages: Record<string, NormalizedPage> = {};
     const sampledUrls = new Set<string>();
+
+    // Real Core Web Vitals field data (e.g. CrUX), keyed by normalized URL.
+    const fieldDataByUrl = new Map<string, { lcp?: number; cls?: number; inp?: number }>();
+    for (const entry of config.fieldData ?? []) {
+      fieldDataByUrl.set(normalizeUrlForMatch(entry.url), entry);
+    }
+    let performanceFieldVerified = false;
     
     // Initialize cache if configured
     const httpCrawler = config.cacheDir ? new HttpCrawler(config.cacheDir) : new HttpCrawler();
@@ -315,6 +333,19 @@ export class SeoEngine {
           if (url === startUrl) {
             page.robotsTxtFound = robotsTxtFound;
             page.sitemapXmlFound = sitemapXmlFound;
+          }
+
+          // Overlay real field metrics (CrUX) when available, so performance reflects
+          // measured user experience rather than the static estimate.
+          const fieldMetrics = fieldDataByUrl.get(normalizeUrlForMatch(finalUrl));
+          if (fieldMetrics) {
+            const lcp = fieldMetrics.lcp ?? page.coreWebVitals?.lcp ?? 0;
+            const cls = fieldMetrics.cls ?? page.coreWebVitals?.cls ?? 0;
+            const inp = fieldMetrics.inp ?? page.coreWebVitals?.inp ?? 0;
+            page.coreWebVitals = { lcp, cls, inp };
+            page.performanceScore = scoreCoreWebVitals({ lcp, cls, inp });
+            page.coreWebVitalsSource = 'field';
+            performanceFieldVerified = true;
           }
 
           pages[finalUrl] = page;
@@ -446,6 +477,7 @@ export class SeoEngine {
       config,
       tierConfig: tierConfig ?? TIER_PRESETS.standard,
       ruleDefinitions: ruleDefs,
+      performanceVerified: performanceFieldVerified || config.lighthouseEnabled === true,
     });
 
     await this.eventBus.emit('score:calculated', {

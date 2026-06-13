@@ -64,6 +64,12 @@ test-schema-report.*
 .seocore-cache/
 .seocore/
 
+# Generated audit/report artifacts (should not be committed)
+seocore-images-report.*
+audit-output/
+screenshots/
+snapshots/
+
 # Private planning notes
 todo-*.md
 steps-*.md
